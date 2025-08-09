@@ -232,127 +232,102 @@ def pagina_falabella():
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
-# --- LÓGICA PARA RAPPI (BOGOTÁ STORES) ---
-def pagina_rappi_av19_blv_cll74():
-    st.markdown("### 🛵 Rappi - Av.19, Blv y Cll 74")
-    column_names = ['vacia_borrar', 'ID', 'ID de tienda', 'Nombre de tienda', 'ID del producto', 'EAN', 'SKU' ,'Nombre del producto', 'Descripción', 'Presentación', 'Precio', 'Descuento', 'Disponibilidad']
-    mapeo_tienda_us = { 900243006: 'us01', 900243075: 'us02', 900246112: 'us03' }
+# --- LÓGICA GENÉRICA PARA RAPPI ---
+def procesar_rappi(uploaded_file_rappi, uploaded_file_erp, mapeo_tienda_us, erp_cols_needed, ciudad_nombre):
+    """
+    Función genérica para procesar archivos de Rappi para cualquier ciudad.
+    """
+    try:
+        # Definir las nuevas columnas del archivo Rappi
+        column_names = [
+            'vacia_borrar', 'ID', 'ID de tienda', 'Nombre de tienda', 'ID del producto', 'EAN', 'SKU',
+            'Nombre del producto', 'Descripción', 'Presentación', 'Precio', 'Descuento', 'Disponibilidad', 'Unidades disponibles'
+        ]
 
-    uploaded_file_rappi = st.file_uploader("📤 Cargar archivo Excel de Rappi", type=['xlsx'], key="rappi_bog_excel")
-    uploaded_file_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="rappi_bog_erp")
+        data_RAPPI = pd.read_excel(uploaded_file_rappi, header=None, skiprows=5, names=column_names, sheet_name="Productos")
+        data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
+
+        # Limpieza y preparación del DataFrame del ERP
+        data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
+        data_ERP = data_ERP[erp_cols_needed]
+        data_ERP.rename(columns={'Codpro': 'SKU'}, inplace=True)
+        data_ERP['SKU'] = data_ERP['SKU'].astype(str)
+
+        # Limpieza y preparación del DataFrame de Rappi
+        data_RAPPI['SKU'] = data_RAPPI['SKU'].astype(str).str.replace('jugandoyeducandoco_', '')
+        data_RAPPI['tienda_us'] = data_RAPPI['ID de tienda'].map(mapeo_tienda_us)
+
+        # Función para obtener el inventario de la columna correcta del ERP
+        def obtener_inventario(row, df_erp):
+            col_inv = row['tienda_us']
+            sku = row['SKU']
+            if pd.notna(col_inv) and pd.notna(sku):
+                inventario = df_erp.loc[df_erp['SKU'] == sku, col_inv]
+                # Asegurarse de que el inventario sea un número y manejar NaN
+                if not inventario.empty and pd.notna(inventario.iloc[0]):
+                    return int(inventario.iloc[0])
+            return 0 # Retornar 0 si no hay inventario o SKU
+
+        # Aplicar la lógica de inventario y disponibilidad
+        data_RAPPI['Inventario'] = data_RAPPI.apply(obtener_inventario, df_erp=data_ERP, axis=1)
+        data_RAPPI['Disponibilidad'] = np.where(data_RAPPI['Inventario'] > 0, 'SI', 'NO')
+        data_RAPPI['Unidades disponibles'] = data_RAPPI['Inventario']
+
+        # Cruzar con ERP para obtener el precio correcto
+        merged_data = pd.merge(data_RAPPI, data_ERP[['SKU', 'Valuni']], on='SKU', how='left')
+        merged_data['Precio'] = merged_data['Valuni']
+
+        # Preparar el DataFrame final con las columnas en el orden correcto
+        columnas_finales = [
+            'vacia_borrar', 'ID', 'ID de tienda', 'Nombre de tienda', 'ID del producto', 'EAN', 'SKU',
+            'Nombre del producto', 'Descripción', 'Presentación', 'Precio', 'Descuento', 'Disponibilidad', 'Unidades disponibles'
+        ]
+        nuevo_df_rappi = merged_data[columnas_finales].copy()
+        nuevo_df_rappi['SKU'] = "jugandoyeducandoco_" + nuevo_df_rappi['SKU'].astype(str)
+
+        # Cargar el archivo original de Rappi para escribir los datos actualizados
+        wb = load_workbook(uploaded_file_rappi)
+        ws = wb['Productos']
+        
+        # Escribir los datos fila por fila, incluyendo la nueva columna
+        for index, row in nuevo_df_rappi.iterrows():
+            # El +1 es porque openpyxl es 1-indexed
+            # El +6 es para saltar las 5 filas de encabezado del archivo original
+            fila_destino = index + 6 
+            for col_idx, value in enumerate(row, start=1):
+                ws.cell(row=fila_destino, column=col_idx, value=value)
+
+        # Guardar el archivo modificado en memoria
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        # Mostrar resultados en la UI
+        st.success(f"✅ ¡Archivo de Rappi - {ciudad_nombre} procesado!")
+        st.dataframe(nuevo_df_rappi.head())
+        st.download_button(
+            label=f"⬇️ Descargar Rappi {ciudad_nombre} modificado",
+            data=output,
+            file_name=f"RAPPI_{ciudad_nombre.replace(' ', '_')}_ACTUALIZADO.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    except Exception as e:
+        st.error(f"❌ Error al procesar: {e}")
+
+# --- PÁGINA DE RAPPI POR CIUDAD ---
+def pagina_rappi_ciudad(ciudad_nombre, titulo_seccion, tiendas, erp_cols, key_suffix):
+    """
+    Crea la interfaz de Streamlit para una ciudad específica de Rappi.
+    """
+    st.markdown(f"### 🛵 Rappi - {titulo_seccion}")
+
+    uploaded_file_rappi = st.file_uploader("📤 Cargar archivo Excel de Rappi", type=['xlsx'], key=f"rappi_{key_suffix}_excel")
+    uploaded_file_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key=f"rappi_{key_suffix}_erp")
 
     if uploaded_file_rappi and uploaded_file_erp:
-        if st.button('🔄 Procesar Rappi (Av.19, Blv y Cll 74)', key="rappi_bog_process"):
+        if st.button(f'🔄 Procesar Rappi {ciudad_nombre}', key=f"rappi_{key_suffix}_process"):
             with st.spinner('Procesando archivos...'):
-                try:
-                    data_RAPPI = pd.read_excel(uploaded_file_rappi, header=None, skiprows=5, names=column_names, sheet_name="Productos")
-                    data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
-
-                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
-                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02", "us03"]]
-                    data_ERP.rename(columns={'Codpro': 'SKU'}, inplace=True)
-
-                    data_RAPPI['SKU'] = data_RAPPI['SKU'].astype(str).str.replace('jugandoyeducandoco_', '')
-                    data_ERP['SKU'] = data_ERP['SKU'].astype(str)
-                    data_RAPPI['tienda_us'] = data_RAPPI['ID de tienda'].map(mapeo_tienda_us)
-
-                    def obtener_inventario(row, df_erp):
-                        col_inv = row['tienda_us']
-                        sku = row['SKU']
-                        if pd.notna(col_inv) and pd.notna(sku):
-                            inventario = df_erp.loc[df_erp['SKU'] == sku, col_inv]
-                            return int(inventario.iloc[0]) if not inventario.empty and pd.notna(inventario.iloc[0]) else 0
-                        return 0
-
-                    data_RAPPI['Inventario'] = data_RAPPI.apply(obtener_inventario, df_erp=data_ERP, axis=1)
-                    data_RAPPI['Disponibilidad_correcta'] = np.where(data_RAPPI['Inventario'] > 0, 'SI', 'NO')
-
-                    merged_data = pd.merge(data_RAPPI, data_ERP, on='SKU', how='left')
-                    merged_data['precio_correcto'] = merged_data['Valuni']
-
-                    columnas_deseadas = ['vacia_borrar', 'ID', 'ID de tienda', 'Nombre de tienda', 'ID del producto', 'EAN', 'SKU', 'Nombre del producto', 'Descripción', 'Presentación', 'precio_correcto', 'Descuento', 'Disponibilidad_correcta']
-                    nuevo_df_rappi = merged_data[columnas_deseadas].copy()
-                    nuevo_df_rappi['SKU'] = "jugandoyeducandoco_" + nuevo_df_rappi['SKU'].astype(str)
-
-                    wb = load_workbook(uploaded_file_rappi)
-                    ws = wb['Productos']
-                    for index, row in nuevo_df_rappi.iterrows():
-                        for col, value in enumerate(row, start=1):
-                           ws.cell(row=index + 6, column=col, value=value)
-
-                    output = BytesIO()
-                    wb.save(output)
-                    output.seek(0)
-
-                    st.success("✅ ¡Archivo de Rappi (Av.19, Blv y Cll 74) procesado!")
-                    st.dataframe(nuevo_df_rappi.head())
-                    st.download_button(label="⬇️ Descargar Rappi (Av.19, Blv y Cll 74) modificado",
-                                       data=output,
-                                       file_name="RAPPI_Av19_Blv_Cll74_ACTUALIZADO.xlsx",
-                                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                except Exception as e:
-                    st.error(f"❌ Error al procesar: {e}")
-
-# --- LÓGICA PARA RAPPI (MEDELLÍN STORES) ---
-def pagina_rappi_bvista_oviedo():
-    st.markdown("### 🛵 Rappi - Bvista y Oviedo")
-    column_names = ['vacia_borrar', 'ID', 'ID de tienda', 'Nombre de tienda', 'ID del producto', 'EAN', 'SKU' ,'Nombre del producto', 'Descripción', 'Presentación', 'Precio', 'Descuento', 'Disponibilidad']
-    mapeo_tienda_us = { 900243002: 'us04', 900418701: 'us05' }
-
-    uploaded_file_rappi = st.file_uploader("📤 Cargar archivo Excel de Rappi", type=['xlsx'], key="rappi_med_excel")
-    uploaded_file_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="rappi_med_erp")
-
-    if uploaded_file_rappi and uploaded_file_erp:
-        if st.button('🔄 Procesar Rappi (Bvista y Oviedo)', key="rappi_med_process"):
-            with st.spinner('Procesando archivos...'):
-                try:
-                    data_RAPPI = pd.read_excel(uploaded_file_rappi, header=None, skiprows=5, names=column_names, sheet_name="Productos")
-                    data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
-
-                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
-                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us04", "us05"]]
-                    data_ERP.rename(columns={'Codpro': 'SKU'}, inplace=True)
-
-                    data_RAPPI['SKU'] = data_RAPPI['SKU'].astype(str).str.replace('jugandoyeducandoco_', '')
-                    data_ERP['SKU'] = data_ERP['SKU'].astype(str)
-                    data_RAPPI['tienda_us'] = data_RAPPI['ID de tienda'].map(mapeo_tienda_us)
-
-                    def obtener_inventario(row, df_erp):
-                        col_inv = row['tienda_us']
-                        sku = row['SKU']
-                        if pd.notna(col_inv) and pd.notna(sku):
-                            inventario = df_erp.loc[df_erp['SKU'] == sku, col_inv]
-                            return int(inventario.iloc[0]) if not inventario.empty and pd.notna(inventario.iloc[0]) else 0
-                        return 0
-
-                    data_RAPPI['Inventario'] = data_RAPPI.apply(obtener_inventario, df_erp=data_ERP, axis=1)
-                    data_RAPPI['Disponibilidad_correcta'] = np.where(data_RAPPI['Inventario'] > 0, 'SI', 'NO')
-
-                    merged_data = pd.merge(data_RAPPI, data_ERP, on='SKU', how='left')
-                    merged_data['precio_correcto'] = merged_data['Valuni']
-
-                    columnas_deseadas = ['vacia_borrar', 'ID', 'ID de tienda', 'Nombre de tienda', 'ID del producto', 'EAN', 'SKU', 'Nombre del producto', 'Descripción', 'Presentación', 'precio_correcto', 'Descuento', 'Disponibilidad_correcta']
-                    nuevo_df_rappi = merged_data[columnas_deseadas].copy()
-                    nuevo_df_rappi['SKU'] = "jugandoyeducandoco_" + nuevo_df_rappi['SKU'].astype(str)
-
-                    wb = load_workbook(uploaded_file_rappi)
-                    ws = wb['Productos']
-                    for index, row in nuevo_df_rappi.iterrows():
-                        for col, value in enumerate(row, start=1):
-                           ws.cell(row=index + 6, column=col, value=value)
-
-                    output = BytesIO()
-                    wb.save(output)
-                    output.seek(0)
-
-                    st.success("✅ ¡Archivo de Rappi (Bvista y Oviedo) procesado!")
-                    st.dataframe(nuevo_df_rappi.head())
-                    st.download_button(label="⬇️ Descargar Rappi (Bvista y Oviedo) modificado",
-                                       data=output,
-                                       file_name="RAPPI_Bvista_Oviedo_ACTUALIZADO.xlsx",
-                                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                except Exception as e:
-                    st.error(f"❌ Error al procesar: {e}")
+                procesar_rappi(uploaded_file_rappi, uploaded_file_erp, tiendas, erp_cols, ciudad_nombre)
 
 # --- LÓGICA PARA WIX ---
 def pagina_wix():
@@ -440,8 +415,9 @@ def main():
         "Mercado Libre - Medellín", 
         "Mercado Libre - Bogotá",
         "Falabella",
-        "Rappi Av.19, Blv y Cll 74",
-        "Rappi Bvista y Oviedo",
+        "Rappi - Bogotá",
+        "Rappi - Barranquilla",
+        "Rappi - Medellín",
         "Wix"
     ]
     opcion = st.sidebar.selectbox("Plataforma:", opciones)
@@ -456,10 +432,30 @@ def main():
         pagina_meli_bogota()
     elif opcion == "Falabella":
         pagina_falabella()
-    elif opcion == "Rappi Av.19, Blv y Cll 74":
-        pagina_rappi_av19_blv_cll74()
-    elif opcion == "Rappi Bvista y Oviedo":
-        pagina_rappi_bvista_oviedo()
+    elif opcion == "Rappi - Bogotá":
+        pagina_rappi_ciudad(
+            ciudad_nombre="Bogotá",
+            titulo_seccion="Bogotá (Av.19 y Blv)",
+            tiendas={900243006: 'us01', 900243075: 'us02'},
+            erp_cols=["Codpro", "Nompro", "Valuni", "us01", "us02"],
+            key_suffix="bog"
+        )
+    elif opcion == "Rappi - Barranquilla":
+        pagina_rappi_ciudad(
+            ciudad_nombre="Barranquilla",
+            titulo_seccion="Barranquilla (Bvista y Cll 74)",
+            tiendas={900243002: 'us04', 900246112: 'us03'},
+            erp_cols=["Codpro", "Nompro", "Valuni", "us03", "us04"],
+            key_suffix="bqa"
+        )
+    elif opcion == "Rappi - Medellín":
+        pagina_rappi_ciudad(
+            ciudad_nombre="Medellín",
+            titulo_seccion="Medellín (Oviedo)",
+            tiendas={900418701: 'us05'},
+            erp_cols=["Codpro", "Nompro", "Valuni", "us05"],
+            key_suffix="med"
+        )
     elif opcion == "Wix":
         pagina_wix()
 
