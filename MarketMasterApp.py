@@ -12,28 +12,27 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- LÓGICA PARA MERCADO LIBRE MEDELLÍN ---
+# --- LÓGICA PARA MERCADO LIBRE MEDELLÍN (Formato nuevo) ---
 def pagina_meli_medellin():
-    """
-    Contiene toda la lógica y la interfaz para procesar archivos de Mercado Libre Medellín.
-    """
     st.markdown("### 🛍️ Mercado Libre - Medellín")
     
-    column_names = [
-        'Número de publicación', 'Número de producto', 'Número de variante', 'SKU', 'Título', 'Variantes',
-        'Cantidad', 'Precio', 'Moneda'
-    ]
-
-    uploaded_file_meli = st.file_uploader("📤 Cargar archivo Excel de Mercado Libre", type=['xlsx'], key="meli_med_excel")
+    uploaded_file_meli = st.file_uploader("📤 Cargar archivo Excel de Mercado Libre (Medellín)", type=['xlsx'], key="meli_med_excel")
     uploaded_file_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="meli_med_erp")
 
     if uploaded_file_meli and uploaded_file_erp:
         if st.button('🔄 Procesar MELI Medellín', key="meli_med_process"):
             with st.spinner('Procesando archivos...'):
                 try:
+                    # Columnas para el formato de Medellín (con una sola columna de Precio)
+                    column_names = [
+                        'Número de publicación', 'Número de producto', 'SKU', 'Título', 'Variantes',
+                        'Stock en tu depósito', 'Precio', 'Moneda'
+                    ]
+                    # Los datos comienzan en la fila 6, por lo que saltamos las 5 primeras
                     data_MELI = pd.read_excel(uploaded_file_meli, header=None, skiprows=5, names=column_names, sheet_name="Publicaciones")
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
 
+                    # Procesamiento del ERP para obtener inventario de Medellín (us05)
                     data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
                     data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us05"]]
                     data_ERP['us05'] = data_ERP['us05'].fillna(0)
@@ -41,6 +40,7 @@ def pagina_meli_medellin():
                     data_ERP = data_ERP.drop(["us05"], axis=1)
                     data_ERP.rename(columns={'Codpro': 'SKU'}, inplace=True)
 
+                    # Preparar y fusionar los datos
                     data_MELI['SKU'] = data_MELI['SKU'].astype(str)
                     data_ERP['SKU'] = data_ERP['SKU'].astype(str)
                     data_MELI['SKU'] = data_MELI['SKU'].replace('nan', np.nan)
@@ -50,27 +50,28 @@ def pagina_meli_medellin():
                     merged_data['Original_Price'] = merged_data['Precio']
                     merged_data['original_order'] = merged_data.index
 
+                    # Lógica de actualización por grupo
                     grouped = merged_data.groupby('Número de publicación')
                     processed_groups = []
                     for name, group in grouped:
                         if group.shape[0] == 1:
-                            group.loc[:, "Cantidad"] = group["Inventario_Medellin"]
+                            group.loc[:, "Stock en tu depósito"] = group["Inventario_Medellin"]
                             group.loc[:, "Precio"] = group["Valuni"]
                         elif group.shape[0] > 1:
-                            group.loc[group.SKU.notna(), "Cantidad"] = group.loc[group.SKU.notna(), "Inventario_Medellin"]
+                            group.loc[group.SKU.notna(), "Stock en tu depósito"] = group.loc[group.SKU.notna(), "Inventario_Medellin"]
                             max_price = group.loc[group.SKU.notna(), "Valuni"].max()
                             group.loc[group.SKU.isna(), "Precio"] = max_price
                         processed_groups.append(group)
 
+                    # DataFrame final
                     final_df = pd.concat(processed_groups)
                     final_df['Precio'] = final_df['Precio'].fillna(final_df['Original_Price'])
                     final_df = final_df.sort_values('original_order')
-                    final_df['Número de variante'] = final_df['Número de variante'].apply(lambda x: str(int(x)) if pd.notna(x) else None)
-                    final_df = final_df.drop(['Original_Price', 'Nompro', 'Valuni', 'Inventario_Medellin', 'original_order'], axis=1)
+                    final_df = final_df[column_names]
 
+                    # Escribir en el archivo Excel de salida
                     wb = load_workbook(uploaded_file_meli)
                     ws = wb['Publicaciones']
-                    
                     for r_idx, row_data in final_df.iterrows():
                         for c_idx, value in enumerate(row_data, start=1):
                             ws.cell(row=r_idx + 6, column=c_idx, value=value)
@@ -82,31 +83,33 @@ def pagina_meli_medellin():
                     st.success("✅ ¡Archivo de MELI Medellín procesado!")
                     st.dataframe(final_df.head())
                     st.download_button(label="⬇️ Descargar MELI Medellín modificado",
-                                      data=output,
-                                      file_name="MELI_Medellin_ACTUALIZADO.xlsx",
-                                      mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                                        data=output,
+                                        file_name="MELI_Medellin_ACTUALIZADO.xlsx",
+                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
-# --- LÓGICA PARA MERCADO LIBRE BOGOTÁ ---
+# --- LÓGICA PARA MERCADO LIBRE BOGOTÁ (Formato original/modificado) ---
 def pagina_meli_bogota():
     st.markdown("### 🛒 Mercado Libre - Bogotá")
-    column_names = [
-        'Número de publicación', 'Número de variante', 'SKU', 'Título', 'Variantes',
-        'Cantidad (Obligatorio)', 'Canal de venta', 'Precio', 'Mercado Shops',
-        'Vincular precio con Mercado Libre', 'Moneda'
-    ]
 
-    uploaded_file_meli = st.file_uploader("📤 Cargar archivo Excel de Mercado Libre", type=['xlsx'], key="meli_bog_excel")
+    uploaded_file_meli = st.file_uploader("📤 Cargar archivo Excel de Mercado Libre (Bogotá)", type=['xlsx'], key="meli_bog_excel")
     uploaded_file_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="meli_bog_erp")
 
     if uploaded_file_meli and uploaded_file_erp:
         if st.button('🔄 Procesar MELI Bogotá', key="meli_bog_process"):
             with st.spinner('Procesando archivos...'):
                 try:
-                    data_MELI = pd.read_excel(uploaded_file_meli, header=None, skiprows=6, names=column_names, sheet_name="Publicaciones")
+                    # Columnas para el formato de Bogotá (con precios separados y columna B vacía)
+                    column_names = [
+                        'Número de publicación', 'col_B_empty', 'Número de producto', 'SKU', 'Título', 'Variantes',
+                        'Stock en tu depósito', 'Canal de venta', 'Precio Mercado Libre', 'Precio Mercado Shops',
+                        'Vincular precio con Mercado Libre', 'Moneda'
+                    ]
+                    data_MELI = pd.read_excel(uploaded_file_meli, header=None, skiprows=5, names=column_names, sheet_name="Publicaciones")
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
 
+                    # Procesamiento del ERP para obtener inventario de Bogotá (us01 + us02)
                     data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
                     data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02"]]
                     data_ERP['us01'] = data_ERP['us01'].fillna(0)
@@ -115,38 +118,45 @@ def pagina_meli_bogota():
                     data_ERP = data_ERP.drop(["us01", "us02"], axis=1)
                     data_ERP.rename(columns={'Codpro': 'SKU'}, inplace=True)
 
+                    # Preparar y fusionar los datos
                     data_MELI['SKU'] = data_MELI['SKU'].astype(str)
                     data_ERP['SKU'] = data_ERP['SKU'].astype(str)
                     data_MELI['SKU'] = data_MELI['SKU'].replace('nan', np.nan)
                     data_ERP['SKU'] = data_ERP['SKU'].replace('nan', np.nan)
 
                     merged_data = pd.merge(data_MELI, data_ERP, on='SKU', how='left')
-                    merged_data['Original_Price'] = merged_data['Precio']
+                    merged_data['Original_Price_ML'] = merged_data['Precio Mercado Libre']
+                    merged_data['Original_Price_MS'] = merged_data['Precio Mercado Shops']
                     merged_data['original_order'] = merged_data.index
 
+                    # Lógica de actualización por grupo
                     grouped = merged_data.groupby('Número de publicación')
                     processed_groups = []
                     for name, group in grouped:
                         if group.shape[0] == 1:
-                            group.loc[:, "Cantidad (Obligatorio)"] = group["Inventario_Bogota"]
-                            group.loc[:, "Precio"] = group["Valuni"]
+                            group.loc[:, "Stock en tu depósito"] = group["Inventario_Bogota"]
+                            group.loc[:, "Precio Mercado Libre"] = group["Valuni"]
+                            group.loc[:, "Precio Mercado Shops"] = group["Valuni"]
                         elif group.shape[0] > 1:
-                            group.loc[group.SKU.notna(), "Cantidad (Obligatorio)"] = group.loc[group.SKU.notna(), "Inventario_Bogota"]
+                            group.loc[group.SKU.notna(), "Stock en tu depósito"] = group.loc[group.SKU.notna(), "Inventario_Bogota"]
                             max_price = group.loc[group.SKU.notna(), "Valuni"].max()
-                            group.loc[group.SKU.isna(), "Precio"] = max_price
+                            group.loc[group.SKU.isna(), "Precio Mercado Libre"] = max_price
+                            group.loc[group.SKU.isna(), "Precio Mercado Shops"] = max_price
                         processed_groups.append(group)
 
+                    # DataFrame final
                     final_df = pd.concat(processed_groups)
-                    final_df['Precio'] = final_df['Precio'].fillna(final_df['Original_Price'])
+                    final_df['Precio Mercado Libre'] = final_df['Precio Mercado Libre'].fillna(final_df['Original_Price_ML'])
+                    final_df['Precio Mercado Shops'] = final_df['Precio Mercado Shops'].fillna(final_df['Original_Price_MS'])
                     final_df = final_df.sort_values('original_order')
-                    final_df['Número de variante'] = final_df['Número de variante'].apply(lambda x: str(int(x)) if pd.notna(x) else None)
-                    final_df = final_df.drop(['Nompro', 'Valuni', 'Inventario_Bogota', 'original_order', 'Original_Price'], axis=1)
-
+                    final_df = final_df[column_names]
+                    
+                    # Escribir en el archivo Excel de salida
                     wb = load_workbook(uploaded_file_meli)
                     ws = wb['Publicaciones']
                     for r_idx, row_data in final_df.iterrows():
                         for c_idx, value in enumerate(row_data, start=1):
-                            ws.cell(row=r_idx + 7, column=c_idx, value=value)
+                            ws.cell(row=r_idx + 6, column=c_idx, value=value)
                     
                     output = BytesIO()
                     wb.save(output)
@@ -155,13 +165,13 @@ def pagina_meli_bogota():
                     st.success("✅ ¡Archivo de MELI Bogotá procesado!")
                     st.dataframe(final_df.head())
                     st.download_button(label="⬇️ Descargar MELI Bogotá modificado",
-                                      data=output,
-                                      file_name="MELI_Bogota_ACTUALIZADO.xlsx",
-                                      mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                                        data=output,
+                                        file_name="MELI_Bogota_ACTUALIZADO.xlsx",
+                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
-# --- LÓGICA PARA FALABELLA ---
+# --- LÓGICA PARA FALABELLA (Sin cambios) ---
 def pagina_falabella():
     st.markdown("### 🧩 Falabella")
     
@@ -180,7 +190,7 @@ def pagina_falabella():
                     data_inventory = pd.read_csv(uploaded_inventory, header=None, skiprows=1, names=column_names_inventory, sep=';', encoding='utf-8')
                     data_erp = pd.read_csv(uploaded_erp, delimiter=';', encoding='latin1')
 
-                    data_erp = data_erp[data_erp['Codpro'].notna() & ~(data_erp['Codpro'].isin(['', ' ']) | data_erp['Codpro'].str.contains('\x1a', na=False))]
+                    data_erp = data_erp[data_erp['Codpro'].notna() & ~(data_erp['Codpro'].isin(['', ' ']) | data_erp['Codpro'].str.contains('\x1a', na=False)))]
                     data_erp = data_erp[['Codpro', 'Nompro', 'Valuni', 'us01', 'us02']]
                     data_erp['us01'] = data_erp['us01'].fillna(0)
                     data_erp['us02'] = data_erp['us02'].fillna(0)
@@ -232,7 +242,7 @@ def pagina_falabella():
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
-# --- LÓGICA GENÉRICA PARA RAPPI ---
+# --- LÓGICA GENÉRICA PARA RAPPI (Sin cambios) ---
 def procesar_rappi(uploaded_file_rappi, uploaded_file_erp, mapeo_tienda_us, erp_cols_needed, ciudad_nombre):
     """
     Función genérica para procesar archivos de Rappi para cualquier ciudad.
@@ -314,7 +324,7 @@ def procesar_rappi(uploaded_file_rappi, uploaded_file_erp, mapeo_tienda_us, erp_
     except Exception as e:
         st.error(f"❌ Error al procesar: {e}")
 
-# --- PÁGINA DE RAPPI POR CIUDAD ---
+# --- PÁGINA DE RAPPI POR CIUDAD (Sin cambios) ---
 def pagina_rappi_ciudad(ciudad_nombre, titulo_seccion, tiendas, erp_cols, key_suffix):
     """
     Crea la interfaz de Streamlit para una ciudad específica de Rappi.
@@ -329,7 +339,7 @@ def pagina_rappi_ciudad(ciudad_nombre, titulo_seccion, tiendas, erp_cols, key_su
             with st.spinner('Procesando archivos...'):
                 procesar_rappi(uploaded_file_rappi, uploaded_file_erp, tiendas, erp_cols, ciudad_nombre)
 
-# --- LÓGICA PARA WIX ---
+# --- LÓGICA PARA WIX (Sin cambios) ---
 def pagina_wix():
     st.markdown("## 🌐 Wix")
     column_names = [
@@ -383,7 +393,7 @@ def pagina_wix():
                     num_files = (num_rows // max_rows_per_file) + (1 if num_rows % max_rows_per_file > 0 else 0)
                     
                     st.info(f"El archivo se dividirá en {num_files} parte(s).")
-                                    
+                                          
                     for i in range(num_files):
                         part = merged_data.iloc[i * max_rows_per_file : (i + 1) * max_rows_per_file]
                         output = part.to_csv(index=False, encoding='utf-8-sig')
@@ -463,3 +473,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
