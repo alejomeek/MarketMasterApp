@@ -33,7 +33,7 @@ def pagina_meli_medellin():
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
 
                     # Procesamiento del ERP para obtener inventario de Medellín (us05)
-                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
+                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | data_ERP['Codpro'].str.contains('\x1a', na=False))]
                     data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us05"]]
                     data_ERP['us05'] = data_ERP['us05'].fillna(0)
                     data_ERP["Inventario_Medellin"] = data_ERP["us05"]
@@ -110,7 +110,7 @@ def pagina_meli_bogota():
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
 
                     # Procesamiento del ERP para obtener inventario de Bogotá (us01 + us02)
-                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
+                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | data_ERP['Codpro'].str.contains('\x1a', na=False))]
                     data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02"]]
                     data_ERP['us01'] = data_ERP['us01'].fillna(0)
                     data_ERP['us02'] = data_ERP['us02'].fillna(0)
@@ -190,7 +190,7 @@ def pagina_falabella():
                     data_inventory = pd.read_csv(uploaded_inventory, header=None, skiprows=1, names=column_names_inventory, sep=';', encoding='utf-8')
                     data_erp = pd.read_csv(uploaded_erp, delimiter=';', encoding='latin1')
 
-                    data_erp = data_erp[data_erp['Codpro'].notna() & ~(data_erp['Codpro'].isin(['', ' ']) | data_erp['Codpro'].str.contains('\x1a', na=False)))]
+                    data_erp = data_erp[data_erp['Codpro'].notna() & ~(data_erp['Codpro'].isin(['', ' ']) | data_erp['Codpro'].str.contains('\x1a', na=False))]
                     data_erp = data_erp[['Codpro', 'Nompro', 'Valuni', 'us01', 'us02']]
                     data_erp['us01'] = data_erp['us01'].fillna(0)
                     data_erp['us02'] = data_erp['us02'].fillna(0)
@@ -258,7 +258,7 @@ def procesar_rappi(uploaded_file_rappi, uploaded_file_erp, mapeo_tienda_us, erp_
         data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
 
         # Limpieza y preparación del DataFrame del ERP
-        data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
+        data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | data_ERP['Codpro'].str.contains('\x1a', na=False))]
         data_ERP = data_ERP[erp_cols_needed]
         data_ERP.rename(columns={'Codpro': 'SKU'}, inplace=True)
         data_ERP['SKU'] = data_ERP['SKU'].astype(str)
@@ -367,7 +367,7 @@ def pagina_wix():
                     
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
                     
-                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
+                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | data_ERP['Codpro'].str.contains('\x1a', na=False))]
                     data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02"]]
                     data_ERP['us01'] = data_ERP['us01'].fillna(0)
                     data_ERP['us02'] = data_ERP['us02'].fillna(0)
@@ -473,4 +473,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
 
