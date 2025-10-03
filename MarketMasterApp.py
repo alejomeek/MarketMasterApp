@@ -91,11 +91,10 @@ def pagina_meli_medellin():
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
-# --- LÓGICA PARA MERCADO LIBRE BOGOTÁ (ACTUALIZADO) ---
+# --- LÓGICA PARA MERCADO LIBRE BOGOTÁ (ACTUALIZADO CON LÓGICA CORREGIDA) ---
 def pagina_meli_bogota():
     st.markdown("### 🛒 Mercado Libre - Bogotá")
     
-    # Columnas actualizadas para Bogotá
     column_names = [
         'ITEM_ID', 'PRODUCT_NUMBER', 'VARIATION_ID', 'SKU', 'TITLE', 'VARIATIONS', 'QUANTITY', 
         'CHANNEL', 'MARKETPLACE_PRICE', 'MSHOPS_PRICE', 'MSHOPS_PRICE_SYNC', 'CURRENCY_ID'
@@ -108,7 +107,6 @@ def pagina_meli_bogota():
         if st.button('🔄 Procesar MELI Bogotá', key="meli_bog_process"):
             with st.spinner('Procesando archivos...'):
                 try:
-                    # Se omiten 6 filas de encabezado
                     data_MELI = pd.read_excel(uploaded_file_meli, header=None, skiprows=6, names=column_names, sheet_name="Publicaciones")
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
 
@@ -132,13 +130,28 @@ def pagina_meli_bogota():
                     grouped = merged_data.groupby('ITEM_ID')
                     processed_groups = []
                     for name, group in grouped:
+                        # --- INICIO DE LA LÓGICA CORREGIDA ---
                         if group.shape[0] == 1:
+                            # CORRECCIÓN LÓGICA: Actualiza cantidad y AMBOS precios si no hay variaciones
                             group.loc[:, "QUANTITY"] = group["Inventario_Bogota"]
                             group.loc[:, "MARKETPLACE_PRICE"] = group["Valuni"]
+                            group.loc[:, "MSHOPS_PRICE"] = group["Valuni"]
+                        
                         elif group.shape[0] > 1:
+                            # CORRECCIÓN LÓGICA: Solo actualiza cantidad de filas CON SKU
                             group.loc[group.SKU.notna(), "QUANTITY"] = group.loc[group.SKU.notna(), "Inventario_Bogota"]
-                            max_price = group.loc[group.SKU.notna(), "Valuni"].max()
-                            group.loc[group.SKU.isna(), "MARKETPLACE_PRICE"] = max_price
+                            
+                            # CORRECCIÓN LÓGICA: Se busca el precio de la primera variación con SKU válido
+                            variations_with_price = group.loc[group.SKU.notna() & group.Valuni.notna()]
+                            
+                            if not variations_with_price.empty:
+                                price_to_set = variations_with_price['Valuni'].iloc[0]
+                                
+                                # Se aplica ese precio a la fila principal (la que NO tiene SKU)
+                                group.loc[group.SKU.isna(), "MARKETPLACE_PRICE"] = price_to_set
+                                group.loc[group.SKU.isna(), "MSHOPS_PRICE"] = price_to_set
+                        # --- FIN DE LA LÓGICA CORREGIDA ---
+                        
                         processed_groups.append(group)
 
                     final_df = pd.concat(processed_groups)
