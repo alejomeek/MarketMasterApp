@@ -45,6 +45,12 @@ def pagina_meli_medellin():
 
                     data_MELI['SKU'] = data_MELI['SKU'].astype(str)
                     data_ERP['SKU'] = data_ERP['SKU'].astype(str)
+
+                    # Limpieza de SKUs para unificar formato
+                    data_MELI['SKU'] = data_MELI['SKU'].str.replace(r'\.0$', '', regex=True)
+                    data_MELI['SKU'] = data_MELI['SKU'].str.strip()
+                    data_ERP['SKU'] = data_ERP['SKU'].str.strip()
+
                     data_MELI['SKU'] = data_MELI['SKU'].replace('nan', np.nan)
                     data_ERP['SKU'] = data_ERP['SKU'].replace('nan', np.nan)
 
@@ -66,6 +72,7 @@ def pagina_meli_medellin():
 
                     final_df = pd.concat(processed_groups)
                     final_df['PRICE'] = final_df['PRICE'].fillna(final_df['Original_Price'])
+                    final_df['QUANTITY'] = final_df['QUANTITY'].fillna(0)
                     final_df = final_df.sort_values('original_order')
 
                     final_df['VARIATION_ID'] = final_df['VARIATION_ID'].apply(lambda x: str(int(x)) if pd.notna(x) else None)
@@ -91,7 +98,7 @@ def pagina_meli_medellin():
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
-# --- LÓGICA PARA MERCADO LIBRE BOGOTÁ (ACTUALIZADO CON LÓGICA CORREGIDA) ---
+# --- LÓGICA PARA MERCADO LIBRE BOGOTÁ (VERSIÓN CON LIMPIEZA DE ESPACIOS) ---
 def pagina_meli_bogota():
     st.markdown("### 🛒 Mercado Libre - Bogotá")
     
@@ -110,6 +117,7 @@ def pagina_meli_bogota():
                     data_MELI = pd.read_excel(uploaded_file_meli, header=None, skiprows=6, names=column_names, sheet_name="Publicaciones")
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
 
+                    # --- INICIO DE LA LÓGICA DE LIMPIEZA DE DATOS ---
                     data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
                     data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02"]]
                     data_ERP['us01'] = data_ERP['us01'].fillna(0)
@@ -118,10 +126,21 @@ def pagina_meli_bogota():
                     data_ERP = data_ERP.drop(["us01", "us02"], axis=1)
                     data_ERP.rename(columns={'Codpro': 'SKU'}, inplace=True)
 
+                    # Conversión inicial a texto
                     data_MELI['SKU'] = data_MELI['SKU'].astype(str)
                     data_ERP['SKU'] = data_ERP['SKU'].astype(str)
+                    
+                    # Limpieza de ".0"
+                    data_MELI['SKU'] = data_MELI['SKU'].str.replace(r'\.0$', '', regex=True)
+
+                    # Se eliminan espacios en blanco al inicio y final de los SKUs en AMBOS archivos
+                    data_MELI['SKU'] = data_MELI['SKU'].str.strip()
+                    data_ERP['SKU'] = data_ERP['SKU'].str.strip()
+
+                    # Reemplazo de 'nan' a un valor nulo real
                     data_MELI['SKU'] = data_MELI['SKU'].replace('nan', np.nan)
                     data_ERP['SKU'] = data_ERP['SKU'].replace('nan', np.nan)
+                    # --- FIN DE LA LÓGICA DE LIMPIEZA DE DATOS ---
 
                     merged_data = pd.merge(data_MELI, data_ERP, on='SKU', how='left')
                     merged_data['Original_Price'] = merged_data['MARKETPLACE_PRICE']
@@ -130,33 +149,29 @@ def pagina_meli_bogota():
                     grouped = merged_data.groupby('ITEM_ID')
                     processed_groups = []
                     for name, group in grouped:
-                        # --- INICIO DE LA LÓGICA CORREGIDA ---
                         if group.shape[0] == 1:
-                            # CORRECCIÓN LÓGICA: Actualiza cantidad y AMBOS precios si no hay variaciones
                             group.loc[:, "QUANTITY"] = group["Inventario_Bogota"]
                             group.loc[:, "MARKETPLACE_PRICE"] = group["Valuni"]
                             group.loc[:, "MSHOPS_PRICE"] = group["Valuni"]
                         
                         elif group.shape[0] > 1:
-                            # CORRECCIÓN LÓGICA: Solo actualiza cantidad de filas CON SKU
                             group.loc[group.SKU.notna(), "QUANTITY"] = group.loc[group.SKU.notna(), "Inventario_Bogota"]
                             
-                            # CORRECCIÓN LÓGICA: Se busca el precio de la primera variación con SKU válido
                             variations_with_price = group.loc[group.SKU.notna() & group.Valuni.notna()]
                             
                             if not variations_with_price.empty:
                                 price_to_set = variations_with_price['Valuni'].iloc[0]
                                 
-                                # Se aplica ese precio a la fila principal (la que NO tiene SKU)
                                 group.loc[group.SKU.isna(), "MARKETPLACE_PRICE"] = price_to_set
                                 group.loc[group.SKU.isna(), "MSHOPS_PRICE"] = price_to_set
-                        # --- FIN DE LA LÓGICA CORREGIDA ---
                         
                         processed_groups.append(group)
 
                     final_df = pd.concat(processed_groups)
                     final_df['MARKETPLACE_PRICE'] = final_df['MARKETPLACE_PRICE'].fillna(final_df['Original_Price'])
                     final_df = final_df.sort_values('original_order')
+                    
+                    final_df['QUANTITY'] = final_df['QUANTITY'].fillna(0)
                     
                     final_df['VARIATION_ID'] = final_df['VARIATION_ID'].apply(lambda x: str(int(x)) if pd.notna(x) else None)
                     final_df = final_df.drop(['Nompro', 'Valuni', 'Inventario_Bogota', 'original_order', 'Original_Price'], axis=1)
