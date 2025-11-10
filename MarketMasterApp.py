@@ -98,13 +98,16 @@ def pagina_meli_medellin():
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
-# --- LÓGICA PARA MERCADO LIBRE BOGOTÁ (VERSIÓN CON LIMPIEZA DE ESPACIOS) ---
+# --- LÓGICA PARA MERCADO LIBRE BOGOTÁ (VERSIÓN ACTUALIZADA CON NUEVAS COLUMNAS) ---
 def pagina_meli_bogota():
     st.markdown("### 🛒 Mercado Libre - Bogotá")
     
+    # Nuevas columnas actualizadas según el nuevo formato de Mercado Libre
     column_names = [
-        'ITEM_ID', 'PRODUCT_NUMBER', 'VARIATION_ID', 'SKU', 'TITLE', 'VARIATIONS', 'QUANTITY', 
-        'CHANNEL', 'MARKETPLACE_PRICE', 'MSHOPS_PRICE', 'MSHOPS_PRICE_SYNC', 'CURRENCY_ID'
+        'FAMILY_ID', 'ITEM_ID', 'PRODUCT_NUMBER', 'VARIATION_ID', 'SKU', 'TITLE', 'VARIATIONS',
+        'STORE_STOCK_QUANTITY_71348291#COP1326882072', 'STORE_STOCK_QUANTITY_71348293#COP1326882073',
+        'TOTAL_STOCK_ALL_STORES', 'STOCK_FULL', 'CHANNEL', 'MARKETPLACE_PRICE', 'MSHOPS_PRICE',
+        'MSHOPS_PRICE_SYNC', 'CURRENCY_ID'
     ]
 
     uploaded_file_meli = st.file_uploader("📤 Cargar archivo Excel de Mercado Libre", type=['xlsx'], key="meli_bog_excel")
@@ -150,12 +153,19 @@ def pagina_meli_bogota():
                     processed_groups = []
                     for name, group in grouped:
                         if group.shape[0] == 1:
-                            group.loc[:, "QUANTITY"] = group["Inventario_Bogota"]
+                            # Actualizar inventario en la nueva columna
+                            group.loc[:, "STORE_STOCK_QUANTITY_71348291#COP1326882072"] = group["Inventario_Bogota"]
+                            # Segunda columna de stock siempre en 0
+                            group.loc[:, "STORE_STOCK_QUANTITY_71348293#COP1326882073"] = 0
+                            # Actualizar precios
                             group.loc[:, "MARKETPLACE_PRICE"] = group["Valuni"]
                             group.loc[:, "MSHOPS_PRICE"] = group["Valuni"]
                         
                         elif group.shape[0] > 1:
-                            group.loc[group.SKU.notna(), "QUANTITY"] = group.loc[group.SKU.notna(), "Inventario_Bogota"]
+                            # Actualizar inventario para variaciones con SKU
+                            group.loc[group.SKU.notna(), "STORE_STOCK_QUANTITY_71348291#COP1326882072"] = group.loc[group.SKU.notna(), "Inventario_Bogota"]
+                            # Segunda columna de stock siempre en 0
+                            group.loc[:, "STORE_STOCK_QUANTITY_71348293#COP1326882073"] = 0
                             
                             variations_with_price = group.loc[group.SKU.notna() & group.Valuni.notna()]
                             
@@ -171,7 +181,10 @@ def pagina_meli_bogota():
                     final_df['MARKETPLACE_PRICE'] = final_df['MARKETPLACE_PRICE'].fillna(final_df['Original_Price'])
                     final_df = final_df.sort_values('original_order')
                     
-                    final_df['QUANTITY'] = final_df['QUANTITY'].fillna(0)
+                    # Asegurar que la columna de inventario no tenga NaN
+                    final_df['STORE_STOCK_QUANTITY_71348291#COP1326882072'] = final_df['STORE_STOCK_QUANTITY_71348291#COP1326882072'].fillna(0)
+                    # Asegurar que la segunda columna de stock sea siempre 0
+                    final_df['STORE_STOCK_QUANTITY_71348293#COP1326882073'] = 0
                     
                     final_df['VARIATION_ID'] = final_df['VARIATION_ID'].apply(lambda x: str(int(x)) if pd.notna(x) else None)
                     final_df = final_df.drop(['Nompro', 'Valuni', 'Inventario_Bogota', 'original_order', 'Original_Price'], axis=1)
