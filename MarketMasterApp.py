@@ -12,18 +12,17 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- LÓGICA PARA MERCADO LIBRE MEDELLÍN (VERSIÓN ACTUALIZADA CON NUEVAS COLUMNAS) ---
+# --- LÓGICA PARA MERCADO LIBRE MEDELLÍN (ACTUALIZADO) ---
 def pagina_meli_medellin():
     """
     Contiene toda la lógica y la interfaz para procesar archivos de Mercado Libre Medellín.
     """
     st.markdown("### 🛍️ Mercado Libre - Medellín")
     
-    # Nuevas columnas actualizadas según el nuevo formato de Mercado Libre Medellín
+    # Columnas actualizadas para Medellín
     column_names = [
-        'FAMILY_ID', 'ITEM_ID', 'PRODUCT_NUMBER', 'VARIATION_ID', 'SKU', 'TITLE', 'VARIATIONS',
-        'STORE_STOCK_QUANTITY_75956250#COP5929020171', 'TOTAL_STOCK_ALL_STORES', 'STOCK_FULL',
-        'PRICE', 'CURRENCY_ID'
+        'ITEM_ID', 'PRODUCT_NUMBER', 'VARIATION_ID', 'SKU', 'TITLE', 'VARIATIONS', 
+        'QUANTITY', 'PRICE', 'CURRENCY_ID'
     ]
 
     uploaded_file_meli = st.file_uploader("📤 Cargar archivo Excel de Mercado Libre", type=['xlsx'], key="meli_med_excel")
@@ -63,22 +62,17 @@ def pagina_meli_medellin():
                     processed_groups = []
                     for name, group in grouped:
                         if group.shape[0] == 1:
-                            # Actualizar inventario en la nueva columna
-                            group.loc[:, "STORE_STOCK_QUANTITY_75956250#COP5929020171"] = group["Inventario_Medellin"]
-                            # Actualizar precio
+                            group.loc[:, "QUANTITY"] = group["Inventario_Medellin"]
                             group.loc[:, "PRICE"] = group["Valuni"]
                         elif group.shape[0] > 1:
-                            # Actualizar inventario para variaciones con SKU
-                            group.loc[group.SKU.notna(), "STORE_STOCK_QUANTITY_75956250#COP5929020171"] = group.loc[group.SKU.notna(), "Inventario_Medellin"]
-                            # Calcular precio máximo para variaciones sin SKU
+                            group.loc[group.SKU.notna(), "QUANTITY"] = group.loc[group.SKU.notna(), "Inventario_Medellin"]
                             max_price = group.loc[group.SKU.notna(), "Valuni"].max()
                             group.loc[group.SKU.isna(), "PRICE"] = max_price
                         processed_groups.append(group)
 
                     final_df = pd.concat(processed_groups)
                     final_df['PRICE'] = final_df['PRICE'].fillna(final_df['Original_Price'])
-                    # Asegurar que la columna de inventario no tenga NaN
-                    final_df['STORE_STOCK_QUANTITY_75956250#COP5929020171'] = final_df['STORE_STOCK_QUANTITY_75956250#COP5929020171'].fillna(0)
+                    final_df['QUANTITY'] = final_df['QUANTITY'].fillna(0)
                     final_df = final_df.sort_values('original_order')
 
                     final_df['VARIATION_ID'] = final_df['VARIATION_ID'].apply(lambda x: str(int(x)) if pd.notna(x) else None)
@@ -410,4 +404,109 @@ def pagina_wix():
                     
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
                     
-                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~
+                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
+                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02"]]
+                    data_ERP['us01'] = data_ERP['us01'].fillna(0)
+                    data_ERP['us02'] = data_ERP['us02'].fillna(0)
+                    data_ERP["Inventario_Bogota"] = data_ERP["us01"] + data_ERP["us02"]
+                    data_ERP.drop(["us01", "us02"], axis=1, inplace=True)
+                    data_ERP.rename(columns={'Codpro': 'sku'}, inplace=True)
+                    data_ERP['sku'] = data_ERP['sku'].astype(str)
+
+                    merged_data = pd.merge(data_wix, data_ERP, on='sku', how='left')
+                    merged_data['Valuni'].fillna(0, inplace=True)
+                    merged_data['Inventario_Bogota'].fillna(0, inplace=True)
+                    merged_data['inventory'] = merged_data['Inventario_Bogota']
+                    merged_data['price'] = merged_data['Valuni']
+                    merged_data = merged_data.drop(["Nompro", "Valuni", "Inventario_Bogota"], axis=1)
+
+                    merged_data['visible'] = np.where(merged_data['inventory'] > 0, "TRUE", "FALSE")
+                    
+                    st.success("✅ ¡Archivo de Wix procesado!")
+                    st.dataframe(merged_data.head())
+                    
+                    num_rows = merged_data.shape[0]
+                    max_rows_per_file = 4000
+                    num_files = (num_rows // max_rows_per_file) + (1 if num_rows % max_rows_per_file > 0 else 0)
+                    
+                    st.info(f"El archivo se dividirá en {num_files} parte(s).")
+                                    
+                    for i in range(num_files):
+                        part = merged_data.iloc[i * max_rows_per_file : (i + 1) * max_rows_per_file]
+                        output = part.to_csv(index=False, encoding='utf-8-sig')
+                        st.download_button(
+                            label=f"⬇️ Descargar Parte {i+1}",
+                            data=output,
+                            file_name=f"Wix_modificado_parte_{i+1}.csv",
+                            mime="text/csv",
+                            key=f"wix_download_{i}"
+                        )
+
+                except Exception as e:
+                    st.error(f"❌ Error al procesar: {e}")
+
+# --- APLICACIÓN PRINCIPAL (NAVEGACIÓN) ---
+def main():
+    # Mostrar logo en la barra lateral
+    try:
+        image = Image.open("logo_transparente.png")
+        st.sidebar.image(image, use_container_width=True)
+    except FileNotFoundError:
+        st.sidebar.warning("Logo no encontrado.")
+
+    st.sidebar.title("Menú de Navegación")
+    st.sidebar.markdown("Selecciona la plataforma que deseas actualizar:")
+
+    # Menú de selección en la barra lateral
+    opciones = [
+        "Mercado Libre - Medellín", 
+        "Mercado Libre - Bogotá",
+        "Falabella",
+        "Rappi - Bogotá",
+        "Rappi - Barranquilla",
+        "Rappi - Medellín",
+        "Wix"
+    ]
+    opcion = st.sidebar.selectbox("Plataforma:", opciones)
+
+    # Título principal de la aplicación
+    st.title("🚀 MarketMaster")
+
+    # Lógica para mostrar la página correcta según la selección
+    if opcion == "Mercado Libre - Medellín":
+        pagina_meli_medellin()
+    elif opcion == "Mercado Libre - Bogotá":
+        pagina_meli_bogota()
+    elif opcion == "Falabella":
+        pagina_falabella()
+    elif opcion == "Rappi - Bogotá":
+        pagina_rappi_ciudad(
+            ciudad_nombre="Bogotá",
+            titulo_seccion="Bogotá (Av.19 y Blv)",
+            tiendas={900243006: 'us01', 900243075: 'us02'},
+            erp_cols=["Codpro", "Nompro", "Valuni", "us01", "us02"],
+            key_suffix="bog"
+        )
+    elif opcion == "Rappi - Barranquilla":
+        pagina_rappi_ciudad(
+            ciudad_nombre="Barranquilla",
+            titulo_seccion="Barranquilla (Bvista y Cll 74)",
+            tiendas={900243002: 'us04', 900246112: 'us03'},
+            erp_cols=["Codpro", "Nompro", "Valuni", "us03", "us04"],
+            key_suffix="bqa"
+        )
+    elif opcion == "Rappi - Medellín":
+        pagina_rappi_ciudad(
+            ciudad_nombre="Medellín",
+            titulo_seccion="Medellín (Oviedo)",
+            tiendas={900418701: 'us05'},
+            erp_cols=["Codpro", "Nompro", "Valuni", "us05"],
+            key_suffix="med"
+        )
+    elif opcion == "Wix":
+        pagina_wix()
+
+    st.sidebar.info("Esta app centraliza la actualización de inventarios y precios en múltiples plataformas.")
+
+if __name__ == "__main__":
+    main()
