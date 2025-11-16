@@ -19,10 +19,11 @@ def pagina_meli_medellin():
     """
     st.markdown("### 🛍️ Mercado Libre - Medellín")
     
-    # Columnas actualizadas para Medellín
+    # Columnas actualizadas para el nuevo formato de Medellín
     column_names = [
-        'ITEM_ID', 'PRODUCT_NUMBER', 'VARIATION_ID', 'SKU', 'TITLE', 'VARIATIONS', 
-        'QUANTITY', 'PRICE', 'CURRENCY_ID'
+        'FAMILY_ID', 'ITEM_ID', 'PRODUCT_NUMBER', 'VARIATION_ID', 'SKU', 'TITLE', 'VARIATIONS',
+        'STORE_STOCK_QUANTITY_75956250#COP5929020171', 'TOTAL_STOCK_ALL_STORES', 'STOCK_FULL',
+        'PRICE', 'CURRENCY_ID'
     ]
 
     uploaded_file_meli = st.file_uploader("📤 Cargar archivo Excel de Mercado Libre", type=['xlsx'], key="meli_med_excel")
@@ -32,10 +33,11 @@ def pagina_meli_medellin():
         if st.button('🔄 Procesar MELI Medellín', key="meli_med_process"):
             with st.spinner('Procesando archivos...'):
                 try:
-                    # Se omiten 5 filas de encabezado
-                    data_MELI = pd.read_excel(uploaded_file_meli, header=None, skiprows=5, names=column_names, sheet_name="Publicaciones")
+                    # Se omiten 6 filas de encabezado (como en Bogotá)
+                    data_MELI = pd.read_excel(uploaded_file_meli, header=None, skiprows=6, names=column_names, sheet_name="Publicaciones")
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
 
+                    # Limpieza del ERP
                     data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
                     data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us05"]]
                     data_ERP['us05'] = data_ERP['us05'].fillna(0)
@@ -43,6 +45,7 @@ def pagina_meli_medellin():
                     data_ERP = data_ERP.drop(["us05"], axis=1)
                     data_ERP.rename(columns={'Codpro': 'SKU'}, inplace=True)
 
+                    # Conversión a string
                     data_MELI['SKU'] = data_MELI['SKU'].astype(str)
                     data_ERP['SKU'] = data_ERP['SKU'].astype(str)
 
@@ -54,36 +57,45 @@ def pagina_meli_medellin():
                     data_MELI['SKU'] = data_MELI['SKU'].replace('nan', np.nan)
                     data_ERP['SKU'] = data_ERP['SKU'].replace('nan', np.nan)
 
+                    # Merge de datos
                     merged_data = pd.merge(data_MELI, data_ERP, on='SKU', how='left')
                     merged_data['Original_Price'] = merged_data['PRICE']
                     merged_data['original_order'] = merged_data.index
 
+                    # Procesamiento por grupos de ITEM_ID
                     grouped = merged_data.groupby('ITEM_ID')
                     processed_groups = []
                     for name, group in grouped:
                         if group.shape[0] == 1:
-                            group.loc[:, "QUANTITY"] = group["Inventario_Medellin"]
+                            # Item con una sola variación
+                            group.loc[:, "STORE_STOCK_QUANTITY_75956250#COP5929020171"] = group["Inventario_Medellin"]
                             group.loc[:, "PRICE"] = group["Valuni"]
                         elif group.shape[0] > 1:
-                            group.loc[group.SKU.notna(), "QUANTITY"] = group.loc[group.SKU.notna(), "Inventario_Medellin"]
+                            # Item con múltiples variaciones
+                            group.loc[group.SKU.notna(), "STORE_STOCK_QUANTITY_75956250#COP5929020171"] = group.loc[group.SKU.notna(), "Inventario_Medellin"]
                             max_price = group.loc[group.SKU.notna(), "Valuni"].max()
                             group.loc[group.SKU.isna(), "PRICE"] = max_price
                         processed_groups.append(group)
 
+                    # Consolidación final
                     final_df = pd.concat(processed_groups)
                     final_df['PRICE'] = final_df['PRICE'].fillna(final_df['Original_Price'])
-                    final_df['QUANTITY'] = final_df['QUANTITY'].fillna(0)
+                    final_df['STORE_STOCK_QUANTITY_75956250#COP5929020171'] = final_df['STORE_STOCK_QUANTITY_75956250#COP5929020171'].fillna(0)
                     final_df = final_df.sort_values('original_order')
 
+                    # Limpieza de VARIATION_ID
                     final_df['VARIATION_ID'] = final_df['VARIATION_ID'].apply(lambda x: str(int(x)) if pd.notna(x) else None)
+                    
+                    # Eliminar columnas temporales del ERP
                     final_df = final_df.drop(['Original_Price', 'Nompro', 'Valuni', 'Inventario_Medellin', 'original_order'], axis=1)
 
+                    # Guardar en el archivo Excel original
                     wb = load_workbook(uploaded_file_meli)
                     ws = wb['Publicaciones']
                     
                     for r_idx, row_data in final_df.iterrows():
                         for c_idx, value in enumerate(row_data, start=1):
-                            ws.cell(row=r_idx + 6, column=c_idx, value=value)
+                            ws.cell(row=r_idx + 7, column=c_idx, value=value)
 
                     output = BytesIO()
                     wb.save(output)
