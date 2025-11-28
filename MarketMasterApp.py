@@ -152,11 +152,10 @@ def pagina_falabella():
                     data_erp = pd.read_csv(uploaded_erp, delimiter=';', encoding='latin1')
 
                     data_erp = data_erp[data_erp['Codpro'].notna() & ~(data_erp['Codpro'].isin(['', ' ']) | data_erp['Codpro'].str.contains('\x1a', na=False))]
-                    data_erp = data_erp[['Codpro', 'Nompro', 'Valuni', 'us01', 'us02']]
-                    data_erp['us01'] = data_erp['us01'].fillna(0)
+                    data_erp = data_erp[['Codpro', 'Nompro', 'Valuni', 'us02']]
                     data_erp['us02'] = data_erp['us02'].fillna(0)
-                    data_erp['Inventario_Bogota'] = data_erp['us01'] + data_erp['us02']
-                    data_erp.drop(['us01', 'us02'], axis=1, inplace=True)
+                    data_erp['Inventario_Falabella'] = data_erp['us02']
+                    data_erp.drop(['us02'], axis=1, inplace=True)
                     data_erp.rename(columns={'Codpro': 'sku'}, inplace=True)
 
                     for df in [data_price, data_inventory]:
@@ -185,9 +184,9 @@ def pagina_falabella():
                     
                     # Procesar inventario
                     st.info("Procesando archivo de inventario...")
-                    merged_inventory = pd.merge(data_inventory, data_erp[['sku', 'Inventario_Bogota']], on='sku', how='left')
-                    merged_inventory['QuantityFalabella'] = merged_inventory['Inventario_Bogota'].fillna(0).astype('int')
-                    merged_inventory.drop(columns=['Inventario_Bogota'], inplace=True)
+                    merged_inventory = pd.merge(data_inventory, data_erp[['sku', 'Inventario_Falabella']], on='sku', how='left')
+                    merged_inventory['QuantityFalabella'] = merged_inventory['Inventario_Falabella'].fillna(0).astype('int')
+                    merged_inventory.drop(columns=['Inventario_Falabella'], inplace=True)
                     merged_inventory.rename(columns={'sku': 'SellerSku'}, inplace=True)
                     
                     csv_data = merged_inventory.to_csv(index=False, sep=';', encoding='utf-8-sig')
