@@ -429,52 +429,253 @@ def pagina_wix_api():
     
     st.info("💡 Esta opción sincroniza automáticamente tus productos de Wix con el ERP sin necesidad de cargar archivos CSV de Wix.")
     
-    # Intentar cargar credenciales desde secrets
+    # ============================================================================
+    # CARGAR API KEY DESDE SECRETS (OBLIGATORIO)
+    # ============================================================================
     try:
-        wix_api_key_default = st.secrets["wix_api"]["api_key"]
+        wix_api_key = st.secrets["wix_api"]["api_key"]
         wix_site_id_default = st.secrets["wix_api"]["site_id"]
-        secrets_available = True
-        st.success("✅ Credenciales cargadas desde secrets")
-    except:
-        wix_api_key_default = ""
-        wix_site_id_default = ""
-        secrets_available = False
+        st.success("🔒 API Key cargada desde configuración segura")
+    except Exception as e:
+        st.error("❌ **API Key no configurada**")
+        st.warning("⚠️ La API Key debe estar configurada en Streamlit Secrets por seguridad.")
+        st.info("📧 Contacta al administrador para configurar las credenciales.")
+        st.stop()
     
-    # Inputs para credenciales de Wix
-    with st.expander("🔑 Configuración de API de Wix", expanded=not secrets_available):
-        if secrets_available:
-            st.info("🔒 Las credenciales se han cargado automáticamente desde la configuración segura. Puedes sobrescribirlas si lo necesitas.")
-        
-        wix_api_key = st.text_input(
-            "API Key de Wix", 
-            value=wix_api_key_default,
-            type="password",
-            help="Tu API Key de Wix Stores (cargada automáticamente si está configurada)",
-            key="wix_api_key_input"
-        )
+    # ============================================================================
+    # SITE ID - EDITABLE EN UI
+    # ============================================================================
+    with st.expander("⚙️ Configuración del Sitio", expanded=True):
+        st.info("💡 Puedes cambiar el Site ID para probar en diferentes sitios de Wix.")
         wix_site_id = st.text_input(
             "Site ID de Wix",
             value=wix_site_id_default,
-            help="El ID de tu sitio Wix (cargado automáticamente si está configurado)",
+            help="El ID de tu sitio Wix (editable para cambiar entre sitios de pruebas y producción)",
             key="wix_site_id_input"
         )
+        
+        # Mostrar info del sitio
+        if wix_site_id == "c9fb6114-70ad-4de2-ba0c-a1bb98e25883":
+            st.success("🧪 Sitio de pruebas/backup seleccionado")
+        elif wix_site_id == "a290c1b4-e593-4126-ae4e-675bd07c1a42":
+            st.warning("🏭 Sitio de producción seleccionado - ¡Ten cuidado!")
+        else:
+            st.info("🌐 Sitio personalizado")
     
     # Upload del archivo ERP
     uploaded_file_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="wix_api_erp")
     
     if wix_api_key and wix_site_id and uploaded_file_erp:
         
-        # Botón para iniciar sincronización
-        if st.button('🚀 Sincronizar con Wix', key="wix_api_sync"):
-            
-            # Configurar headers
-            headers = {
-                'Authorization': wix_api_key,
-                'wix-site-id': wix_site_id,
-                'Content-Type': 'application/json'
-            }
-            
-            base_url = "https://www.wixapis.com/stores"
+        # Configurar headers
+        headers = {
+            'Authorization': wix_api_key,
+            'wix-site-id': wix_site_id,
+            'Content-Type': 'application/json'
+        }
+        
+        base_url = "https://www.wixapis.com/stores"
+        
+        # ====================================================================
+        # BOTONES DE ANÁLISIS Y SINCRONIZACIÓN
+        # ====================================================================
+        st.markdown("---")
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            analyze_button = st.button('📊 Analizar Cambios', key="wix_api_analyze", use_container_width=True)
+        
+        with col2:
+            sync_button = st.button('🚀 Sincronizar con Wix', key="wix_api_sync", type="primary", use_container_width=True)
+        
+        # ====================================================================
+        # ANÁLISIS PREVIO (sin modificar nada)
+        # ====================================================================
+        if analyze_button:
+            with st.spinner('📊 Analizando productos y calculando cambios...'):
+                try:
+                    # ============================================================
+                    # PASO 1: CARGAR DATOS DEL ERP
+                    # ============================================================
+                    data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
+                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
+                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02"]]
+                    data_ERP['us01'] = data_ERP['us01'].fillna(0)
+                    data_ERP['us02'] = data_ERP['us02'].fillna(0)
+                    data_ERP["Inventario_Bogota"] = data_ERP["us01"] + data_ERP["us02"]
+                    data_ERP = data_ERP[["Codpro", "Valuni", "Inventario_Bogota"]]
+                    data_ERP.rename(columns={'Codpro': 'SKU', 'Valuni': 'Precio', 'Inventario_Bogota': 'Inventario'}, inplace=True)
+                    data_ERP['SKU'] = data_ERP['SKU'].astype(str)
+                    
+                    # ============================================================
+                    # PASO 2: DESCARGAR PRODUCTOS DE WIX
+                    # ============================================================
+                    all_products = []
+                    offset = 0
+                    limit = 100
+                    url = f"{base_url}/v1/products/query"
+                    
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    
+                    # Primera llamada para obtener el total
+                    payload = {
+                        "includeHiddenProducts": True,
+                        "query": {"paging": {"limit": limit, "offset": 0}}
+                    }
+                    
+                    response = requests.post(url, headers=headers, json=payload, timeout=30)
+                    
+                    if response.status_code != 200:
+                        st.error(f"❌ Error al conectar con Wix: {response.status_code}")
+                        st.code(response.text)
+                        st.stop()
+                    
+                    data = response.json()
+                    total_products = data.get("totalResults", 0)
+                    all_products.extend(data.get("products", []))
+                    
+                    status_text.text(f"Descargados: {len(all_products)}/{total_products}")
+                    progress_bar.progress(min(len(all_products) / total_products, 1.0))
+                    
+                    # Continuar descargando el resto
+                    offset = limit
+                    while len(all_products) < total_products:
+                        payload["query"]["paging"]["offset"] = offset
+                        
+                        response = requests.post(url, headers=headers, json=payload, timeout=30)
+                        if response.status_code == 200:
+                            data = response.json()
+                            all_products.extend(data.get("products", []))
+                            
+                            status_text.text(f"Descargados: {len(all_products)}/{total_products}")
+                            progress_bar.progress(min(len(all_products) / total_products, 1.0))
+                        else:
+                            st.warning(f"⚠️ Error en lote (offset {offset}): {response.status_code}")
+                            break
+                        
+                        offset += limit
+                        time.sleep(0.3)
+                    
+                    progress_bar.empty()
+                    status_text.empty()
+                    
+                    # ============================================================
+                    # PASO 3: PROCESAR Y ANALIZAR
+                    # ============================================================
+                    wix_records = []
+                    for product in all_products:
+                        product_id = product.get('id')
+                        sku = str(product.get('sku', ''))
+                        visible = product.get('visible', False)
+                        
+                        price_data = product.get('price', {})
+                        current_price = price_data.get('price', 0)
+                        
+                        stock_data = product.get('stock', {})
+                        current_quantity = stock_data.get('quantity', 0)
+                        
+                        wix_records.append({
+                            'product_id': product_id,
+                            'SKU': sku,
+                            'current_price': current_price,
+                            'current_quantity': current_quantity,
+                            'visible': visible
+                        })
+                    
+                    wix_df = pd.DataFrame(wix_records)
+                    
+                    # Merge y análisis
+                    merged_data = pd.merge(wix_df, data_ERP, on='SKU', how='inner')
+                    merged_data['Precio'].fillna(0, inplace=True)
+                    merged_data['Inventario'].fillna(0, inplace=True)
+                    merged_data['should_be_visible'] = merged_data['Inventario'] > 0
+                    
+                    merged_data['needs_price_update'] = merged_data['current_price'] != merged_data['Precio']
+                    merged_data['needs_inventory_update'] = merged_data['current_quantity'] != merged_data['Inventario']
+                    merged_data['needs_visibility_update'] = merged_data['visible'] != merged_data['should_be_visible']
+                    
+                    merged_data['needs_update'] = (
+                        merged_data['needs_price_update'] | 
+                        merged_data['needs_inventory_update'] | 
+                        merged_data['needs_visibility_update']
+                    )
+                    
+                    to_update = merged_data[merged_data['needs_update'] == True]
+                    
+                    # ============================================================
+                    # MOSTRAR RESULTADOS DEL ANÁLISIS
+                    # ============================================================
+                    st.success("✅ Análisis completado")
+                    
+                    st.markdown("---")
+                    st.subheader("📊 Resumen del Análisis")
+                    
+                    # Métricas principales
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        st.metric(
+                            label="🌐 Total en Wix",
+                            value=total_products,
+                            help="Total de productos en tu tienda Wix"
+                        )
+                    
+                    with col2:
+                        st.metric(
+                            label="🔗 Encontrados en ERP",
+                            value=len(merged_data),
+                            help="Productos que existen tanto en Wix como en ERP"
+                        )
+                    
+                    with col3:
+                        st.metric(
+                            label="✏️ A Modificar",
+                            value=len(to_update),
+                            help="Productos que requieren actualización"
+                        )
+                    
+                    with col4:
+                        porcentaje = (len(to_update) / len(merged_data) * 100) if len(merged_data) > 0 else 0
+                        st.metric(
+                            label="📈 % a Modificar",
+                            value=f"{porcentaje:.1f}%"
+                        )
+                    
+                    # Desglose detallado
+                    if len(to_update) > 0:
+                        st.markdown("#### 🔍 Desglose de Cambios")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            price_changes = to_update['needs_price_update'].sum()
+                            st.metric("💰 Actualizarán Precio", price_changes)
+                        
+                        with col2:
+                            inventory_changes = to_update['needs_inventory_update'].sum()
+                            st.metric("📦 Actualizarán Inventario", inventory_changes)
+                        
+                        with col3:
+                            visibility_changes = to_update['needs_visibility_update'].sum()
+                            st.metric("👁️ Cambiarán Visibilidad", visibility_changes)
+                        
+                        # Preview de productos a modificar
+                        st.markdown("#### 📋 Preview de Productos a Modificar (primeros 20)")
+                        preview_df = to_update[['SKU', 'current_price', 'Precio', 'current_quantity', 'Inventario', 'visible', 'should_be_visible']].head(20)
+                        preview_df.columns = ['SKU', 'Precio Actual', 'Precio Nuevo', 'Inv. Actual', 'Inv. Nuevo', 'Visible Actual', 'Visible Nuevo']
+                        st.dataframe(preview_df, use_container_width=True)
+                    else:
+                        st.info("🎉 Todos los productos están actualizados. No se requieren cambios.")
+                    
+                except Exception as e:
+                    st.error(f"❌ Error durante el análisis: {str(e)}")
+                    st.code(str(e))
+        
+        # ====================================================================
+        # SINCRONIZACIÓN (modificar productos)
+        # ====================================================================
+        if sync_button:
             
             with st.spinner('🌐 Conectando con Wix y descargando productos...'):
                 try:
