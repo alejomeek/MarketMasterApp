@@ -479,6 +479,32 @@ def pagina_wix_api():
         base_url = "https://www.wixapis.com/stores"
         
         # ====================================================================
+        # CONFIGURACIÓN DE TESTING
+        # ====================================================================
+        with st.expander("🧪 Configuración de Testing", expanded=True):
+            st.info("💡 Para testing, puedes limitar cuántos productos actualizar.")
+            
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                enable_limit = st.checkbox(
+                    "Limitar número de productos a actualizar", 
+                    value=True,
+                    help="Recomendado para pruebas iniciales"
+                )
+            with col2:
+                if enable_limit:
+                    test_limit = st.number_input(
+                        "Máximo de productos",
+                        min_value=1,
+                        max_value=1000,
+                        value=20,
+                        step=5,
+                        help="Número máximo de productos a actualizar"
+                    )
+                else:
+                    test_limit = None
+        
+        # ====================================================================
         # BOTONES DE ANÁLISIS Y SINCRONIZACIÓN
         # ====================================================================
         st.markdown("---")
@@ -821,9 +847,22 @@ def pagina_wix_api():
                     status_text_update = st.empty()
                     
                     stats = {'success': 0, 'failed': 0, 'errors': []}
-                    total_to_update = len(to_update)
                     
-                    for idx, row in to_update.iterrows():
+                    # Aplicar límite de testing si está habilitado
+                    if enable_limit and test_limit:
+                        total_available = len(to_update)
+                        total_to_update = min(total_available, test_limit)
+                        
+                        if total_available > test_limit:
+                            st.warning(f"⚠️ **MODO TEST**: Solo se actualizarán los primeros {test_limit} productos de {total_available} encontrados.")
+                        
+                        to_update_limited = to_update.head(test_limit)
+                    else:
+                        total_to_update = len(to_update)
+                        to_update_limited = to_update
+                        st.info(f"📊 Se actualizarán TODOS los productos encontrados: {total_to_update}")
+                    
+                    for idx, row in to_update_limited.iterrows():
                         product_id = row['product_id']
                         sku = row['SKU']
                         new_price = float(row['Precio'])
@@ -832,47 +871,22 @@ def pagina_wix_api():
                         
                         status_text_update.text(f"Actualizando {stats['success'] + stats['failed'] + 1}/{total_to_update}: SKU {sku}")
                         
-                        # Obtener detalles del producto (revision y variant_id)
+                        # Actualizar usando endpoint v1 (más compatible)
                         try:
-                            details_url = f"{base_url}/v3/products/{product_id}"
-                            details_response = requests.get(details_url, headers=headers, timeout=10)
+                            update_url = f"{base_url}/v1/products/{product_id}"
                             
-                            if details_response.status_code != 200:
-                                stats['failed'] += 1
-                                stats['errors'].append({'sku': sku, 'error': 'No se pudo obtener detalles'})
-                                continue
-                            
-                            details_data = details_response.json()
-                            product_details = details_data.get('product', {})
-                            revision = product_details.get('revision', '1')
-                            
-                            variants_info = product_details.get('variantsInfo', {})
-                            variants = variants_info.get('variants', [])
-                            variant_id = variants[0].get('id') if variants else None
-                            
-                            if not variant_id:
-                                stats['failed'] += 1
-                                stats['errors'].append({'sku': sku, 'error': 'No se encontró variant_id'})
-                                continue
-                            
-                            # Actualizar producto
-                            update_url = f"{base_url}/v3/products-with-inventory/{product_id}"
+                            # Payload para actualización v1
                             update_payload = {
                                 "product": {
-                                    "id": product_id,
-                                    "revision": revision,
-                                    "visible": new_visible,
-                                    "variantsInfo": {
-                                        "variants": [{
-                                            "id": variant_id,
-                                            "choices": [],
-                                            "price": {
-                                                "actualPrice": {
-                                                    "amount": str(new_price)
-                                                }
-                                            }
-                                        }]
-                                    }
+                                    "priceData": {
+                                        "price": new_price
+                                    },
+                                    "stock": {
+                                        "trackInventory": True,
+                                        "quantity": new_quantity,
+                                        "inStock": new_quantity > 0
+                                    },
+                                    "visible": new_visible
                                 }
                             }
                             
@@ -882,7 +896,11 @@ def pagina_wix_api():
                                 stats['success'] += 1
                             else:
                                 stats['failed'] += 1
-                                error_msg = update_response.json().get('message', 'Error desconocido')
+                                try:
+                                    error_data = update_response.json()
+                                    error_msg = error_data.get('message', f'HTTP {update_response.status_code}')
+                                except:
+                                    error_msg = f'HTTP {update_response.status_code}'
                                 stats['errors'].append({'sku': sku, 'error': error_msg})
                             
                             time.sleep(0.3)  # Rate limiting
