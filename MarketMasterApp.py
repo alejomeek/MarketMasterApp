@@ -370,54 +370,44 @@ def pagina_wix_manual():
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
-# --- LÓGICA PARA WIX AUTOMATIZADO (NUEVA PÁGINA) ---
+# --- LÓGICA PARA WIX AUTOMATIZADO (CORREGIDA) ---
 def pagina_wix_automatizada():
     st.markdown("## 🌐 Wix Automático 🤖 (Sitio de Backup)")
     st.warning(f"⚠️ **MODO PRUEBA ACTIVADO**: Los cambios se aplicarán exclusivamente al sitio con ID: `{WIX_BACKUP_SITE_ID}`")
 
-    # Verificación de credenciales
     if 'wix_api' not in st.secrets:
         st.error("❌ Faltan credenciales en secrets.toml [wix_api]")
         return
     
     api_key = st.secrets["wix_api"]["api_key"]
-    
     uploaded_file_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="wix_erp_auto")
 
     if uploaded_file_erp:
-        # Estado de la sesión para manejar el flujo de análisis -> confirmación -> sync
         if 'wix_sync_state' not in st.session_state:
-            st.session_state.wix_sync_state = 'upload' # upload, analyzed, synced
+            st.session_state.wix_sync_state = 'upload'
 
         if st.button('🔍 1. Analizar Diferencias', key="analyze_wix"):
             with st.spinner('Conectando a Wix y descargando catálogo...'):
-                # 1. Descargar catálogo actual (Live)
                 df_wix_live = fetch_wix_products_backup(api_key)
             
             if df_wix_live is not None and not df_wix_live.empty:
                 with st.spinner('Cruzando datos con el ERP...'):
-                    # 2. Procesar ERP
                     try:
                         data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
-                        # Limpieza básica igual a la manual
                         data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
-                        data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us06"]] # Usamos us06 para Wix
+                        data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us06"]]
                         data_ERP['us06'] = data_ERP['us06'].fillna(0).astype(int)
                         data_ERP['Valuni'] = data_ERP['Valuni'].fillna(0).astype(float)
                         data_ERP.rename(columns={'Codpro': 'sku'}, inplace=True)
                         data_ERP['sku'] = data_ERP['sku'].astype(str).str.strip()
                         
-                        # 3. Merge
                         merged = pd.merge(df_wix_live, data_ERP, on='sku', how='inner')
                         
-                        # 4. Detectar cambios
-                        # Tolerancia pequeña para floats en precio
                         merged['diff_price'] = np.abs(merged['current_price'] - merged['Valuni']) > 0.01
                         merged['diff_stock'] = merged['current_stock'] != merged['us06']
                         
                         to_update = merged[merged['diff_price'] | merged['diff_stock']].copy()
                         
-                        # Guardar en sesión para el siguiente paso
                         st.session_state.wix_to_update = to_update
                         st.session_state.wix_sync_state = 'analyzed'
                         
@@ -426,22 +416,17 @@ def pagina_wix_automatizada():
                     except Exception as e:
                         st.error(f"Error procesando ERP: {e}")
 
-        # Mostrar resultados del análisis
         if st.session_state.get('wix_sync_state') == 'analyzed':
             df_update = st.session_state.wix_to_update
             
             if df_update.empty:
-                st.info("✅ ¡Todo está sincronizado! No hay diferencias de precio ni stock entre Wix y el ERP.")
+                st.info("✅ ¡Todo está sincronizado! No hay diferencias.")
             else:
                 st.warning(f"⚠️ Se encontraron **{len(df_update)}** productos con diferencias.")
                 
-                # Mostrar tabla de diferencias
                 st.dataframe(
                     df_update[['sku', 'name', 'current_price', 'Valuni', 'current_stock', 'us06']]
-                    .rename(columns={
-                        'current_price': 'Precio Wix', 'Valuni': 'Precio ERP',
-                        'current_stock': 'Stock Wix', 'us06': 'Stock ERP'
-                    })
+                    .rename(columns={'current_price': 'Precio Wix', 'Valuni': 'Precio ERP', 'current_stock': 'Stock Wix', 'us06': 'Stock ERP'})
                 )
                 
                 st.write("---")
@@ -454,12 +439,12 @@ def pagina_wix_automatizada():
                     success_count = 0
                     errors = []
                     
-                    for idx, row in df_update.iterrows():
-                        # Determinar qué enviar
+                    # --- CORRECCIÓN AQUÍ: Usamos enumerate para tener un índice limpio (i) ---
+                    for i, (index, row) in enumerate(df_update.iterrows()):
                         new_p = row['Valuni'] if row['diff_price'] else None
                         new_s = row['us06'] if row['diff_stock'] else None
                         
-                        status_text.text(f"Actualizando: {row['sku']} - {row['name'][:30]}...")
+                        status_text.text(f"Actualizando ({i+1}/{total_items}): {row['sku']}...")
                         
                         ok, msg = update_wix_product_single(api_key, row['id'], new_price=new_p, new_stock=new_s)
                         
@@ -468,9 +453,12 @@ def pagina_wix_automatizada():
                         else:
                             errors.append(f"{row['sku']}: {msg}")
                         
-                        # Actualizar barra
-                        progress_bar.progress((idx + 1) / total_items)
-                        time.sleep(0.1) # Pequeña pausa para no saturar
+                        # Calculamos progreso asegurando que no pase de 1.0
+                        progreso = min((i + 1) / total_items, 1.0)
+                        progress_bar.progress(progreso)
+                        
+                        # Pausa muy leve
+                        time.sleep(0.05)
                     
                     progress_bar.empty()
                     status_text.empty()
@@ -482,9 +470,8 @@ def pagina_wix_automatizada():
                                 st.write(e)
                     else:
                         st.balloons()
-                        st.success(f"✅ ¡Éxito! Se actualizaron {success_count} productos correctamente en el sitio de Backup.")
+                        st.success(f"✅ ¡Éxito! Se actualizaron {success_count} productos correctamente.")
                     
-                    # Resetear estado
                     st.session_state.wix_sync_state = 'upload'
 
 
