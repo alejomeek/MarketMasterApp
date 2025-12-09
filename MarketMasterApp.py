@@ -4,6 +4,8 @@ from io import BytesIO
 from openpyxl import load_workbook
 from PIL import Image
 import numpy as np
+import requests
+import time
 
 # --- CONFIGURACIÓN GENERAL DE LA PÁGINA ---
 st.set_page_config(
