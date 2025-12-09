@@ -4,8 +4,6 @@ from io import BytesIO
 from openpyxl import load_workbook
 from PIL import Image
 import numpy as np
-import requests
-import time
 
 # --- CONFIGURACIÓN GENERAL DE LA PÁGINA ---
 st.set_page_config(
@@ -14,221 +12,162 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- CONFIGURACIÓN DE SEGURIDAD PARA PRUEBAS ---
-# ID del sitio de RESPALDO para pruebas automáticas
-WIX_BACKUP_SITE_ID = "c9fb6114-70ad-4de2-ba0c-a1bb98e25883"
-WIX_API_URL_QUERY = "https://www.wixapis.com/stores/v1/products/query"
-
-# --- FUNCIONES AUXILIARES API WIX (AUTOMATIZACIÓN) ---
-@st.cache_data(ttl=300, show_spinner=False)
-def fetch_wix_products_backup(api_key):
+# --- LÓGICA PARA MERCADO LIBRE MEDELLÍN ---
+def pagina_meli_medellin():
     """
-    Descarga el catálogo del sitio de BACKUP para sincronización.
-    Retorna DF con columns: ['id', 'sku', 'current_price', 'current_stock', 'name']
+    Contiene toda la lógica y la interfaz para procesar archivos de Mercado Libre Medellín.
     """
-    headers = {
-        'Authorization': api_key,
-        'wix-site-id': WIX_BACKUP_SITE_ID, # Usamos forzadamente el ID de backup
-        'Content-Type': 'application/json'
-    }
+    st.markdown("### 🛍️ Mercado Libre - Medellín")
     
-    products = []
-    offset = 0
-    limit = 100
-    
-    progress_text = "Descargando catálogo de Wix (Backup)..."
-    my_bar = st.progress(0, text=progress_text)
-
-    try:
-        while True:
-            payload = {
-                "includeHiddenProducts": True,
-                "query": {
-                    "paging": {
-                        "limit": limit,
-                        "offset": offset
-                    }
-                }
-            }
-            
-            response = requests.post(WIX_API_URL_QUERY, headers=headers, json=payload, timeout=20)
-            
-            if response.status_code != 200:
-                st.error(f"Error conectando a Wix Backup: {response.status_code}")
-                break
-            
-            data = response.json()
-            items = data.get('products', [])
-            total_results = data.get('totalResults', 0)
-            
-            if not items:
-                break
-                
-            for p in items:
-                # Extraer datos clave
-                pid = p.get('id')
-                sku = p.get('sku', '')
-                name = p.get('name', 'Sin Nombre')
-                price = p.get('price', {}).get('price', 0)
-                
-                # Stock
-                stock_info = p.get('stock', {})
-                inventory = stock_info.get('quantity', 0)
-                # Si trackInventory es false pero inStock es true, ponemos un flag o 999
-                # Para efectos de sync, asumiremos que si es None es 0 o lo ignoramos si no maneja stock
-                if inventory is None:
-                    inventory = 0 
-
-                products.append({
-                    'id': pid,
-                    'sku': str(sku).strip(), # Limpiar espacios
-                    'name': name,
-                    'current_price': float(price),
-                    'current_stock': int(inventory)
-                })
-            
-            if total_results > 0:
-                current_len = len(products)
-                percent = min(current_len / total_results, 1.0)
-                my_bar.progress(percent, text=f"Descargando: {current_len} de {total_results}")
-
-            if len(items) < limit:
-                break
-            
-            offset += limit
-            
-        my_bar.empty()
-        return pd.DataFrame(products)
-
-    except Exception as e:
-        st.error(f"Error crítico descargando Wix: {e}")
-        return None
-
-def update_wix_product_single(api_key, product_id, new_price=None, new_stock=None):
-    """
-    Actualiza un solo producto en Wix (Precio y/o Stock).
-    """
-    headers = {
-        'Authorization': api_key,
-        'wix-site-id': WIX_BACKUP_SITE_ID, # Forzamos backup
-        'Content-Type': 'application/json'
-    }
-    
-    url = f"https://www.wixapis.com/stores/v1/products/{product_id}"
-    
-    # Construir payload dinámico (PATCH)
-    product_payload = {}
-    
-    if new_price is not None:
-        product_payload["priceData"] = {"price": float(new_price)}
-        
-    if new_stock is not None:
-        # Para actualizar stock vía updateProduct, debemos asegurar trackInventory=True
-        product_payload["stock"] = {
-            "trackInventory": True,
-            "quantity": int(new_stock)
-        }
-        
-    if not product_payload:
-        return False, "Sin cambios"
-
-    payload = {"product": product_payload}
-
-    try:
-        response = requests.patch(url, headers=headers, json=payload, timeout=10)
-        if response.status_code == 200:
-            return True, "OK"
-        else:
-            return False, f"Error {response.status_code}: {response.text}"
-    except Exception as e:
-        return False, str(e)
-
-
-# --- LÓGICA PARA MERCADO LIBRE ---
-def pagina_meli_bogota():
-    st.markdown("### 🛒 Mercado Libre")
     column_names = [
-        'FAMILY_ID', 'ITEM_ID', 'PRODUCT_NUMBER', 'VARIATION_ID', 'SKU', 'TITLE', 'VARIATIONS',
-        'STORE_STOCK_QUANTITY_71348291#COP1326882072', 'STORE_STOCK_QUANTITY_71843625#COP1326882074',
-        'STORE_STOCK_QUANTITY_76644462#COP1326882075', 'STORE_STOCK_QUANTITY_71348293#COP1326882073',
-        'TOTAL_STOCK_ALL_STORES', 'CHANNEL', 'MARKETPLACE_PRICE', 'MSHOPS_PRICE', 'MSHOPS_PRICE_SYNC',
-        'CURRENCY_ID', 'LISTING_TYPE', 'FEE_PER_SALE_MARKETPLACE', 'FEE_PER_SALE_MSHOPS'
+        'Número de publicación', 'Número de producto', 'Número de variante', 'SKU', 'Título', 'Variantes',
+        'Cantidad', 'Precio', 'Moneda'
     ]
+
+    uploaded_file_meli = st.file_uploader("📤 Cargar archivo Excel de Mercado Libre", type=['xlsx'], key="meli_med_excel")
+    uploaded_file_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="meli_med_erp")
+
+    if uploaded_file_meli and uploaded_file_erp:
+        if st.button('🔄 Procesar MELI Medellín', key="meli_med_process"):
+            with st.spinner('Procesando archivos...'):
+                try:
+                    data_MELI = pd.read_excel(uploaded_file_meli, header=None, skiprows=5, names=column_names, sheet_name="Publicaciones")
+                    data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
+
+                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
+                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us05"]]
+                    data_ERP['us05'] = data_ERP['us05'].fillna(0)
+                    data_ERP["Inventario_Medellin"] = data_ERP["us05"]
+                    data_ERP = data_ERP.drop(["us05"], axis=1)
+                    data_ERP.rename(columns={'Codpro': 'SKU'}, inplace=True)
+
+                    data_MELI['SKU'] = data_MELI['SKU'].astype(str)
+                    data_ERP['SKU'] = data_ERP['SKU'].astype(str)
+                    data_MELI['SKU'] = data_MELI['SKU'].replace('nan', np.nan)
+                    data_ERP['SKU'] = data_ERP['SKU'].replace('nan', np.nan)
+
+                    merged_data = pd.merge(data_MELI, data_ERP, on='SKU', how='left')
+                    merged_data['Original_Price'] = merged_data['Precio']
+                    merged_data['original_order'] = merged_data.index
+
+                    grouped = merged_data.groupby('Número de publicación')
+                    processed_groups = []
+                    for name, group in grouped:
+                        if group.shape[0] == 1:
+                            group.loc[:, "Cantidad"] = group["Inventario_Medellin"]
+                            group.loc[:, "Precio"] = group["Valuni"]
+                        elif group.shape[0] > 1:
+                            group.loc[group.SKU.notna(), "Cantidad"] = group.loc[group.SKU.notna(), "Inventario_Medellin"]
+                            max_price = group.loc[group.SKU.notna(), "Valuni"].max()
+                            group.loc[group.SKU.isna(), "Precio"] = max_price
+                        processed_groups.append(group)
+
+                    final_df = pd.concat(processed_groups)
+                    final_df['Precio'] = final_df['Precio'].fillna(final_df['Original_Price'])
+                    final_df = final_df.sort_values('original_order')
+                    final_df['Número de variante'] = final_df['Número de variante'].apply(lambda x: str(int(x)) if pd.notna(x) else None)
+                    final_df = final_df.drop(['Original_Price', 'Nompro', 'Valuni', 'Inventario_Medellin', 'original_order'], axis=1)
+
+                    wb = load_workbook(uploaded_file_meli)
+                    ws = wb['Publicaciones']
+                    
+                    for r_idx, row_data in final_df.iterrows():
+                        for c_idx, value in enumerate(row_data, start=1):
+                            ws.cell(row=r_idx + 6, column=c_idx, value=value)
+
+                    output = BytesIO()
+                    wb.save(output)
+                    output.seek(0)
+
+                    st.success("✅ ¡Archivo de MELI Medellín procesado!")
+                    st.dataframe(final_df.head())
+                    st.download_button(label="⬇️ Descargar MELI Medellín modificado",
+                                      data=output,
+                                      file_name="MELI_Medellin_ACTUALIZADO.xlsx",
+                                      mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                except Exception as e:
+                    st.error(f"❌ Error al procesar: {e}")
+
+# --- LÓGICA PARA MERCADO LIBRE BOGOTÁ ---
+def pagina_meli_bogota():
+    st.markdown("### 🛒 Mercado Libre - Bogotá")
+    column_names = [
+        'Número de publicación', 'Número de variante', 'SKU', 'Título', 'Variantes',
+        'Cantidad (Obligatorio)', 'Canal de venta', 'Precio', 'Mercado Shops',
+        'Vincular precio con Mercado Libre', 'Moneda'
+    ]
+
     uploaded_file_meli = st.file_uploader("📤 Cargar archivo Excel de Mercado Libre", type=['xlsx'], key="meli_bog_excel")
     uploaded_file_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="meli_bog_erp")
 
     if uploaded_file_meli and uploaded_file_erp:
-        if st.button('🔄 Procesar MELI', key="meli_bog_process"):
+        if st.button('🔄 Procesar MELI Bogotá', key="meli_bog_process"):
             with st.spinner('Procesando archivos...'):
                 try:
                     data_MELI = pd.read_excel(uploaded_file_meli, header=None, skiprows=6, names=column_names, sheet_name="Publicaciones")
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
+
                     data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
-                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us05", "us06"]]
-                    data_ERP['us05'] = data_ERP['us05'].fillna(0)
-                    data_ERP['us06'] = data_ERP['us06'].fillna(0)
-                    data_ERP["Inventario_us05"] = data_ERP["us05"]
-                    data_ERP["Inventario_us06"] = data_ERP["us06"]
-                    data_ERP = data_ERP.drop(["us05", "us06"], axis=1)
+                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02"]]
+                    data_ERP['us01'] = data_ERP['us01'].fillna(0)
+                    data_ERP['us02'] = data_ERP['us02'].fillna(0)
+                    data_ERP["Inventario_Bogota"] = data_ERP["us01"] + data_ERP["us02"]
+                    data_ERP = data_ERP.drop(["us01", "us02"], axis=1)
                     data_ERP.rename(columns={'Codpro': 'SKU'}, inplace=True)
+
                     data_MELI['SKU'] = data_MELI['SKU'].astype(str)
                     data_ERP['SKU'] = data_ERP['SKU'].astype(str)
-                    data_MELI['SKU'] = data_MELI['SKU'].str.replace(r'\.0$', '', regex=True)
-                    data_MELI['SKU'] = data_MELI['SKU'].str.strip()
-                    data_ERP['SKU'] = data_ERP['SKU'].str.strip()
                     data_MELI['SKU'] = data_MELI['SKU'].replace('nan', np.nan)
                     data_ERP['SKU'] = data_ERP['SKU'].replace('nan', np.nan)
+
                     merged_data = pd.merge(data_MELI, data_ERP, on='SKU', how='left')
-                    merged_data['Original_Price'] = merged_data['MARKETPLACE_PRICE']
+                    merged_data['Original_Price'] = merged_data['Precio']
                     merged_data['original_order'] = merged_data.index
-                    grouped = merged_data.groupby('ITEM_ID')
+
+                    grouped = merged_data.groupby('Número de publicación')
                     processed_groups = []
                     for name, group in grouped:
                         if group.shape[0] == 1:
-                            group.loc[:, "STORE_STOCK_QUANTITY_71348291#COP1326882072"] = 0
-                            group.loc[:, "STORE_STOCK_QUANTITY_71348293#COP1326882073"] = 0
-                            group.loc[:, "STORE_STOCK_QUANTITY_71843625#COP1326882074"] = group["Inventario_us06"]
-                            group.loc[:, "STORE_STOCK_QUANTITY_76644462#COP1326882075"] = group["Inventario_us05"]
-                            group.loc[:, "MARKETPLACE_PRICE"] = group["Valuni"]
-                            group.loc[:, "MSHOPS_PRICE"] = group["Valuni"]
+                            group.loc[:, "Cantidad (Obligatorio)"] = group["Inventario_Bogota"]
+                            group.loc[:, "Precio"] = group["Valuni"]
                         elif group.shape[0] > 1:
-                            group.loc[:, "STORE_STOCK_QUANTITY_71348291#COP1326882072"] = 0
-                            group.loc[:, "STORE_STOCK_QUANTITY_71348293#COP1326882073"] = 0
-                            group.loc[group.SKU.notna(), "STORE_STOCK_QUANTITY_71843625#COP1326882074"] = group.loc[group.SKU.notna(), "Inventario_us06"]
-                            group.loc[group.SKU.notna(), "STORE_STOCK_QUANTITY_76644462#COP1326882075"] = group.loc[group.SKU.notna(), "Inventario_us05"]
-                            variations_with_price = group.loc[group.SKU.notna() & group.Valuni.notna()]
-                            if not variations_with_price.empty:
-                                price_to_set = variations_with_price['Valuni'].iloc[0]
-                                group.loc[group.SKU.isna(), "MARKETPLACE_PRICE"] = price_to_set
-                                group.loc[group.SKU.isna(), "MSHOPS_PRICE"] = price_to_set
+                            group.loc[group.SKU.notna(), "Cantidad (Obligatorio)"] = group.loc[group.SKU.notna(), "Inventario_Bogota"]
+                            max_price = group.loc[group.SKU.notna(), "Valuni"].max()
+                            group.loc[group.SKU.isna(), "Precio"] = max_price
                         processed_groups.append(group)
+
                     final_df = pd.concat(processed_groups)
-                    final_df['MARKETPLACE_PRICE'] = final_df['MARKETPLACE_PRICE'].fillna(final_df['Original_Price'])
+                    final_df['Precio'] = final_df['Precio'].fillna(final_df['Original_Price'])
                     final_df = final_df.sort_values('original_order')
-                    final_df['STORE_STOCK_QUANTITY_71348291#COP1326882072'] = 0
-                    final_df['STORE_STOCK_QUANTITY_71348293#COP1326882073'] = 0
-                    final_df['STORE_STOCK_QUANTITY_71843625#COP1326882074'] = final_df['STORE_STOCK_QUANTITY_71843625#COP1326882074'].fillna(0)
-                    final_df['STORE_STOCK_QUANTITY_76644462#COP1326882075'] = final_df['STORE_STOCK_QUANTITY_76644462#COP1326882075'].fillna(0)
-                    final_df['VARIATION_ID'] = final_df['VARIATION_ID'].apply(lambda x: str(int(x)) if pd.notna(x) else None)
-                    final_df = final_df.drop(['Nompro', 'Valuni', 'Inventario_us05', 'Inventario_us06', 'original_order', 'Original_Price'], axis=1)
+                    final_df['Número de variante'] = final_df['Número de variante'].apply(lambda x: str(int(x)) if pd.notna(x) else None)
+                    final_df = final_df.drop(['Nompro', 'Valuni', 'Inventario_Bogota', 'original_order', 'Original_Price'], axis=1)
+
                     wb = load_workbook(uploaded_file_meli)
                     ws = wb['Publicaciones']
                     for r_idx, row_data in final_df.iterrows():
                         for c_idx, value in enumerate(row_data, start=1):
                             ws.cell(row=r_idx + 7, column=c_idx, value=value)
+                    
                     output = BytesIO()
                     wb.save(output)
                     output.seek(0)
-                    st.success("✅ ¡Archivo de MELI procesado!")
-                    st.download_button(label="⬇️ Descargar MELI modificado", data=output, file_name="MELI_ACTUALIZADO.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+                    st.success("✅ ¡Archivo de MELI Bogotá procesado!")
+                    st.dataframe(final_df.head())
+                    st.download_button(label="⬇️ Descargar MELI Bogotá modificado",
+                                      data=output,
+                                      file_name="MELI_Bogota_ACTUALIZADO.xlsx",
+                                      mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
 # --- LÓGICA PARA FALABELLA ---
 def pagina_falabella():
     st.markdown("### 🧩 Falabella")
+    
     column_names_price = ['SellerSku', 'ShopSku', 'PriceFalabella', 'SalePriceFalabella', 'SaleStartDateFalabella', 'SaleEndDateFalabella', 'Name']
     column_names_inventory = ['SellerSku', 'ShopSku', 'QuantityFalabella', 'Name']
+
     uploaded_price = st.file_uploader("📦 Cargar archivo de precios (Excel)", type=['xlsx'], key="fala_price")
     uploaded_inventory = st.file_uploader("📊 Cargar archivo de inventario (CSV)", type=['csv'], key="fala_inv")
     uploaded_erp = st.file_uploader("🧾 Cargar archivo ERP (CSV)", type=['csv'], key="fala_erp")
@@ -240,89 +179,184 @@ def pagina_falabella():
                     data_price = pd.read_excel(uploaded_price, header=None, skiprows=1, names=column_names_price)
                     data_inventory = pd.read_csv(uploaded_inventory, header=None, skiprows=1, names=column_names_inventory, sep=';', encoding='utf-8')
                     data_erp = pd.read_csv(uploaded_erp, delimiter=';', encoding='latin1')
+
                     data_erp = data_erp[data_erp['Codpro'].notna() & ~(data_erp['Codpro'].isin(['', ' ']) | data_erp['Codpro'].str.contains('\x1a', na=False))]
-                    data_erp = data_erp[['Codpro', 'Nompro', 'Valuni', 'us02']]
+                    data_erp = data_erp[['Codpro', 'Nompro', 'Valuni', 'us01', 'us02']]
+                    data_erp['us01'] = data_erp['us01'].fillna(0)
                     data_erp['us02'] = data_erp['us02'].fillna(0)
-                    data_erp['Inventario_Falabella'] = data_erp['us02']
-                    data_erp.drop(['us02'], axis=1, inplace=True)
+                    data_erp['Inventario_Bogota'] = data_erp['us01'] + data_erp['us02']
+                    data_erp.drop(['us01', 'us02'], axis=1, inplace=True)
                     data_erp.rename(columns={'Codpro': 'sku'}, inplace=True)
-                    for df in [data_price, data_inventory]: df.rename(columns={'SellerSku': 'sku'}, inplace=True)
-                    for df in [data_price, data_inventory, data_erp]: df['sku'] = df['sku'].astype(str).str.strip()
+
+                    for df in [data_price, data_inventory]:
+                        df.rename(columns={'SellerSku': 'sku'}, inplace=True)
+                    for df in [data_price, data_inventory, data_erp]:
+                        df['sku'] = df['sku'].astype(str).str.strip()
+                    
                     data_price['ShopSku'] = data_price['ShopSku'].astype(str).str.replace('.0', '', regex=False)
                     data_inventory['ShopSku'] = data_inventory['ShopSku'].astype(str).str.replace('.0', '', regex=False)
+
+                    # Procesar precios
+                    st.info("Procesando archivo de precios...")
                     merged_price = pd.merge(data_price, data_erp[['sku', 'Valuni']], on='sku', how='left')
                     merged_price['PriceFalabella'] = merged_price['Valuni']
                     merged_price.drop(columns=['Valuni'], inplace=True)
+                    
                     wb_price = load_workbook(uploaded_price)
                     ws_price = wb_price.active
                     for i, row in merged_price.iterrows():
-                        for j, value in enumerate(row): ws_price.cell(row=i+2, column=j+1, value=value)
+                        for j, value in enumerate(row):
+                            ws_price.cell(row=i+2, column=j+1, value=value)
+                    
                     buffer_price = BytesIO()
                     wb_price.save(buffer_price)
                     buffer_price.seek(0)
-                    merged_inventory = pd.merge(data_inventory, data_erp[['sku', 'Inventario_Falabella']], on='sku', how='left')
-                    merged_inventory['QuantityFalabella'] = merged_inventory['Inventario_Falabella'].fillna(0).astype('int')
-                    merged_inventory.drop(columns=['Inventario_Falabella'], inplace=True)
+                    
+                    # Procesar inventario
+                    st.info("Procesando archivo de inventario...")
+                    merged_inventory = pd.merge(data_inventory, data_erp[['sku', 'Inventario_Bogota']], on='sku', how='left')
+                    merged_inventory['QuantityFalabella'] = merged_inventory['Inventario_Bogota'].fillna(0).astype('int')
+                    merged_inventory.drop(columns=['Inventario_Bogota'], inplace=True)
                     merged_inventory.rename(columns={'sku': 'SellerSku'}, inplace=True)
+                    
                     csv_data = merged_inventory.to_csv(index=False, sep=';', encoding='utf-8-sig')
+
                     st.success("✅ ¡Archivos de Falabella procesados!")
+                    
                     st.download_button("⬇️ Descargar precios modificados", buffer_price, "Precios_Falabella_Modificado.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                     st.download_button("⬇️ Descargar inventario modificado", csv_data, "Inventario_Falabella_Modificado.csv", mime="text/csv")
+                    
+                    st.markdown("#### Vista Previa Inventario")
+                    st.dataframe(merged_inventory.head())
+
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
-# --- LÓGICA RAPPI GENÉRICA ---
-def procesar_rappi(uploaded_file_rappi, uploaded_file_erp, mapeo_tienda_us, erp_cols_needed, ciudad_nombre):
-    try:
-        column_names = ['vacia_borrar', 'ID', 'ID de tienda', 'Nombre de tienda', 'ID del producto', 'EAN', 'SKU', 'Nombre del producto', 'Descripción', 'Presentación', 'Precio', 'Descuento', 'Disponibilidad', 'Unidades disponibles']
-        data_RAPPI = pd.read_excel(uploaded_file_rappi, header=None, skiprows=5, names=column_names, sheet_name="Productos")
-        data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
-        data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
-        data_ERP = data_ERP[erp_cols_needed]
-        data_ERP.rename(columns={'Codpro': 'SKU'}, inplace=True)
-        data_ERP['SKU'] = data_ERP['SKU'].astype(str)
-        data_RAPPI['SKU'] = data_RAPPI['SKU'].astype(str).str.replace('jugandoyeducandoco_', '')
-        data_RAPPI['tienda_us'] = data_RAPPI['ID de tienda'].map(mapeo_tienda_us)
-        def obtener_inventario(row, df_erp):
-            col_inv = row['tienda_us']
-            sku = row['SKU']
-            if pd.notna(col_inv) and pd.notna(sku):
-                inventario = df_erp.loc[df_erp['SKU'] == sku, col_inv]
-                if not inventario.empty and pd.notna(inventario.iloc[0]): return int(inventario.iloc[0])
-            return 0
-        data_RAPPI['Inventario'] = data_RAPPI.apply(obtener_inventario, df_erp=data_ERP, axis=1)
-        data_RAPPI['Disponibilidad'] = np.where(data_RAPPI['Inventario'] > 0, 'SI', 'NO')
-        data_RAPPI['Unidades disponibles'] = data_RAPPI['Inventario']
-        merged_data = pd.merge(data_RAPPI, data_ERP[['SKU', 'Valuni']], on='SKU', how='left')
-        merged_data['Precio'] = merged_data['Valuni']
-        columnas_finales = ['vacia_borrar', 'ID', 'ID de tienda', 'Nombre de tienda', 'ID del producto', 'EAN', 'SKU', 'Nombre del producto', 'Descripción', 'Presentación', 'Precio', 'Descuento', 'Disponibilidad', 'Unidades disponibles']
-        nuevo_df_rappi = merged_data[columnas_finales].copy()
-        nuevo_df_rappi['SKU'] = "jugandoyeducandoco_" + nuevo_df_rappi['SKU'].astype(str)
-        wb = load_workbook(uploaded_file_rappi)
-        ws = wb['Productos']
-        for index, row in nuevo_df_rappi.iterrows():
-            fila_destino = index + 6 
-            for col_idx, value in enumerate(row, start=1): ws.cell(row=fila_destino, column=col_idx, value=value)
-        output = BytesIO()
-        wb.save(output)
-        output.seek(0)
-        st.success(f"✅ ¡Archivo de Rappi - {ciudad_nombre} procesado!")
-        st.download_button(label=f"⬇️ Descargar Rappi {ciudad_nombre} modificado", data=output, file_name=f"RAPPI_{ciudad_nombre.replace(' ', '_')}_ACTUALIZADO.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    except Exception as e:
-        st.error(f"❌ Error al procesar: {e}")
+# --- LÓGICA PARA RAPPI (BOGOTÁ STORES) ---
+def pagina_rappi_av19_blv_cll74():
+    st.markdown("### 🛵 Rappi - Av.19, Blv y Cll 74")
+    column_names = ['vacia_borrar', 'ID', 'ID de tienda', 'Nombre de tienda', 'ID del producto', 'EAN', 'SKU' ,'Nombre del producto', 'Descripción', 'Presentación', 'Precio', 'Descuento', 'Disponibilidad']
+    mapeo_tienda_us = { 900243006: 'us01', 900243075: 'us02', 900246112: 'us03' }
 
-def pagina_rappi_ciudad(ciudad_nombre, titulo_seccion, tiendas, erp_cols, key_suffix):
-    st.markdown(f"### 🛵 Rappi - {titulo_seccion}")
-    uploaded_file_rappi = st.file_uploader("📤 Cargar archivo Excel de Rappi", type=['xlsx'], key=f"rappi_{key_suffix}_excel")
-    uploaded_file_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key=f"rappi_{key_suffix}_erp")
+    uploaded_file_rappi = st.file_uploader("📤 Cargar archivo Excel de Rappi", type=['xlsx'], key="rappi_bog_excel")
+    uploaded_file_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="rappi_bog_erp")
+
     if uploaded_file_rappi and uploaded_file_erp:
-        if st.button(f'🔄 Procesar Rappi {ciudad_nombre}', key=f"rappi_{key_suffix}_process"):
+        if st.button('🔄 Procesar Rappi (Av.19, Blv y Cll 74)', key="rappi_bog_process"):
             with st.spinner('Procesando archivos...'):
-                procesar_rappi(uploaded_file_rappi, uploaded_file_erp, tiendas, erp_cols, ciudad_nombre)
+                try:
+                    data_RAPPI = pd.read_excel(uploaded_file_rappi, header=None, skiprows=5, names=column_names, sheet_name="Productos")
+                    data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
 
-# --- LÓGICA PARA WIX MANUAL (CSV) ---
-def pagina_wix_manual():
-    st.markdown("## 🌐 Wix (Manual - CSV)")
+                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
+                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02", "us03"]]
+                    data_ERP.rename(columns={'Codpro': 'SKU'}, inplace=True)
+
+                    data_RAPPI['SKU'] = data_RAPPI['SKU'].astype(str).str.replace('jugandoyeducandoco_', '')
+                    data_ERP['SKU'] = data_ERP['SKU'].astype(str)
+                    data_RAPPI['tienda_us'] = data_RAPPI['ID de tienda'].map(mapeo_tienda_us)
+
+                    def obtener_inventario(row, df_erp):
+                        col_inv = row['tienda_us']
+                        sku = row['SKU']
+                        if pd.notna(col_inv) and pd.notna(sku):
+                            inventario = df_erp.loc[df_erp['SKU'] == sku, col_inv]
+                            return int(inventario.iloc[0]) if not inventario.empty and pd.notna(inventario.iloc[0]) else 0
+                        return 0
+
+                    data_RAPPI['Inventario'] = data_RAPPI.apply(obtener_inventario, df_erp=data_ERP, axis=1)
+                    data_RAPPI['Disponibilidad_correcta'] = np.where(data_RAPPI['Inventario'] > 0, 'SI', 'NO')
+
+                    merged_data = pd.merge(data_RAPPI, data_ERP, on='SKU', how='left')
+                    merged_data['precio_correcto'] = merged_data['Valuni']
+
+                    columnas_deseadas = ['vacia_borrar', 'ID', 'ID de tienda', 'Nombre de tienda', 'ID del producto', 'EAN', 'SKU', 'Nombre del producto', 'Descripción', 'Presentación', 'precio_correcto', 'Descuento', 'Disponibilidad_correcta']
+                    nuevo_df_rappi = merged_data[columnas_deseadas].copy()
+                    nuevo_df_rappi['SKU'] = "jugandoyeducandoco_" + nuevo_df_rappi['SKU'].astype(str)
+
+                    wb = load_workbook(uploaded_file_rappi)
+                    ws = wb['Productos']
+                    for index, row in nuevo_df_rappi.iterrows():
+                        for col, value in enumerate(row, start=1):
+                           ws.cell(row=index + 6, column=col, value=value)
+
+                    output = BytesIO()
+                    wb.save(output)
+                    output.seek(0)
+
+                    st.success("✅ ¡Archivo de Rappi (Av.19, Blv y Cll 74) procesado!")
+                    st.dataframe(nuevo_df_rappi.head())
+                    st.download_button(label="⬇️ Descargar Rappi (Av.19, Blv y Cll 74) modificado",
+                                       data=output,
+                                       file_name="RAPPI_Av19_Blv_Cll74_ACTUALIZADO.xlsx",
+                                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                except Exception as e:
+                    st.error(f"❌ Error al procesar: {e}")
+
+# --- LÓGICA PARA RAPPI (MEDELLÍN STORES) ---
+def pagina_rappi_bvista_oviedo():
+    st.markdown("### 🛵 Rappi - Bvista y Oviedo")
+    column_names = ['vacia_borrar', 'ID', 'ID de tienda', 'Nombre de tienda', 'ID del producto', 'EAN', 'SKU' ,'Nombre del producto', 'Descripción', 'Presentación', 'Precio', 'Descuento', 'Disponibilidad']
+    mapeo_tienda_us = { 900243002: 'us04', 900418701: 'us05' }
+
+    uploaded_file_rappi = st.file_uploader("📤 Cargar archivo Excel de Rappi", type=['xlsx'], key="rappi_med_excel")
+    uploaded_file_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="rappi_med_erp")
+
+    if uploaded_file_rappi and uploaded_file_erp:
+        if st.button('🔄 Procesar Rappi (Bvista y Oviedo)', key="rappi_med_process"):
+            with st.spinner('Procesando archivos...'):
+                try:
+                    data_RAPPI = pd.read_excel(uploaded_file_rappi, header=None, skiprows=5, names=column_names, sheet_name="Productos")
+                    data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
+
+                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
+                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us04", "us05"]]
+                    data_ERP.rename(columns={'Codpro': 'SKU'}, inplace=True)
+
+                    data_RAPPI['SKU'] = data_RAPPI['SKU'].astype(str).str.replace('jugandoyeducandoco_', '')
+                    data_ERP['SKU'] = data_ERP['SKU'].astype(str)
+                    data_RAPPI['tienda_us'] = data_RAPPI['ID de tienda'].map(mapeo_tienda_us)
+
+                    def obtener_inventario(row, df_erp):
+                        col_inv = row['tienda_us']
+                        sku = row['SKU']
+                        if pd.notna(col_inv) and pd.notna(sku):
+                            inventario = df_erp.loc[df_erp['SKU'] == sku, col_inv]
+                            return int(inventario.iloc[0]) if not inventario.empty and pd.notna(inventario.iloc[0]) else 0
+                        return 0
+
+                    data_RAPPI['Inventario'] = data_RAPPI.apply(obtener_inventario, df_erp=data_ERP, axis=1)
+                    data_RAPPI['Disponibilidad_correcta'] = np.where(data_RAPPI['Inventario'] > 0, 'SI', 'NO')
+
+                    merged_data = pd.merge(data_RAPPI, data_ERP, on='SKU', how='left')
+                    merged_data['precio_correcto'] = merged_data['Valuni']
+
+                    columnas_deseadas = ['vacia_borrar', 'ID', 'ID de tienda', 'Nombre de tienda', 'ID del producto', 'EAN', 'SKU', 'Nombre del producto', 'Descripción', 'Presentación', 'precio_correcto', 'Descuento', 'Disponibilidad_correcta']
+                    nuevo_df_rappi = merged_data[columnas_deseadas].copy()
+                    nuevo_df_rappi['SKU'] = "jugandoyeducandoco_" + nuevo_df_rappi['SKU'].astype(str)
+
+                    wb = load_workbook(uploaded_file_rappi)
+                    ws = wb['Productos']
+                    for index, row in nuevo_df_rappi.iterrows():
+                        for col, value in enumerate(row, start=1):
+                           ws.cell(row=index + 6, column=col, value=value)
+
+                    output = BytesIO()
+                    wb.save(output)
+                    output.seek(0)
+
+                    st.success("✅ ¡Archivo de Rappi (Bvista y Oviedo) procesado!")
+                    st.dataframe(nuevo_df_rappi.head())
+                    st.download_button(label="⬇️ Descargar Rappi (Bvista y Oviedo) modificado",
+                                       data=output,
+                                       file_name="RAPPI_Bvista_Oviedo_ACTUALIZADO.xlsx",
+                                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                except Exception as e:
+                    st.error(f"❌ Error al procesar: {e}")
+
+# --- LÓGICA PARA WIX ---
+def pagina_wix():
+    st.markdown("## 🌐 Wix")
     column_names = [
         'handleId', 'fieldType', 'name', 'description', 'productImageUrl', 'collection', 'sku', 'ribbon', 
         'price', 'surcharge', 'visible', 'discountMode', 'discountValue', 'inventory', 'weight', 'cost',
@@ -334,149 +368,364 @@ def pagina_wix_manual():
         'additionalInfoTitle5', 'additionalInfoDescription5', 'additionalInfoTitle6', 'additionalInfoDescription6',
         'customTextField1', 'customTextCharLimit1', 'customTextMandatory1', 'customTextField2', 'customTextCharLimit2', 'customTextMandatory2', 'brand'
     ]
+
     uploaded_file_wix = st.file_uploader("📤 Cargar archivo CSV de Wix", type=['csv'], key="wix_csv")
     uploaded_file_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="wix_erp")
 
     if uploaded_file_wix and uploaded_file_erp:
-        if st.button('🔄 Procesar Wix (CSV)', key="wix_process"):
+        if st.button('🔄 Procesar Wix', key="wix_process"):
             with st.spinner('Procesando archivos...'):
                 try:
                     data_wix = pd.read_csv(uploaded_file_wix, header=0, dtype={'sku': str})
+                    # Renombrar columnas después de cargar
                     data_wix.columns = column_names
+                    
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
+                    
                     data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
-                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us06"]]
-                    data_ERP['us06'] = data_ERP['us06'].fillna(0)
-                    data_ERP["Inventario_Wix"] = data_ERP["us06"]
-                    data_ERP.drop(["us06"], axis=1, inplace=True)
+                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02"]]
+                    data_ERP['us01'] = data_ERP['us01'].fillna(0)
+                    data_ERP['us02'] = data_ERP['us02'].fillna(0)
+                    data_ERP["Inventario_Bogota"] = data_ERP["us01"] + data_ERP["us02"]
+                    data_ERP.drop(["us01", "us02"], axis=1, inplace=True)
                     data_ERP.rename(columns={'Codpro': 'sku'}, inplace=True)
                     data_ERP['sku'] = data_ERP['sku'].astype(str)
+
                     merged_data = pd.merge(data_wix, data_ERP, on='sku', how='left')
                     merged_data['Valuni'].fillna(0, inplace=True)
-                    merged_data['Inventario_Wix'].fillna(0, inplace=True)
-                    merged_data['inventory'] = merged_data['Inventario_Wix']
+                    merged_data['Inventario_Bogota'].fillna(0, inplace=True)
+                    merged_data['inventory'] = merged_data['Inventario_Bogota']
                     merged_data['price'] = merged_data['Valuni']
-                    merged_data = merged_data.drop(["Nompro", "Valuni", "Inventario_Wix"], axis=1)
+                    merged_data = merged_data.drop(["Nompro", "Valuni", "Inventario_Bogota"], axis=1)
+
                     merged_data['visible'] = np.where(merged_data['inventory'] > 0, "TRUE", "FALSE")
+                    
                     st.success("✅ ¡Archivo de Wix procesado!")
+                    st.dataframe(merged_data.head())
+                    
                     num_rows = merged_data.shape[0]
                     max_rows_per_file = 4000
                     num_files = (num_rows // max_rows_per_file) + (1 if num_rows % max_rows_per_file > 0 else 0)
+                    
                     st.info(f"El archivo se dividirá en {num_files} parte(s).")
+                                    
                     for i in range(num_files):
                         part = merged_data.iloc[i * max_rows_per_file : (i + 1) * max_rows_per_file]
                         output = part.to_csv(index=False, encoding='utf-8-sig')
-                        st.download_button(label=f"⬇️ Descargar Parte {i+1}", data=output, file_name=f"Wix_modificado_parte_{i+1}.csv", mime="text/csv", key=f"wix_download_{i}")
+                        st.download_button(
+                            label=f"⬇️ Descargar Parte {i+1}",
+                            data=output,
+                            file_name=f"Wix_modificado_parte_{i+1}.csv",
+                            mime="text/csv",
+                            key=f"wix_download_{i}"
+                        )
+
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
-# --- LÓGICA PARA WIX AUTOMATIZADO (CORREGIDA) ---
-def pagina_wix_automatizada():
-    st.markdown("## 🌐 Wix Automático 🤖 (Sitio de Backup)")
-    st.warning(f"⚠️ **MODO PRUEBA ACTIVADO**: Los cambios se aplicarán exclusivamente al sitio con ID: `{WIX_BACKUP_SITE_ID}`")
-
-    if 'wix_api' not in st.secrets:
-        st.error("❌ Faltan credenciales en secrets.toml [wix_api]")
-        return
+# --- LÓGICA PARA WIX VIA API ---
+def pagina_wix_api():
+    st.markdown("## 🌐 Wix (Actualización Automática vía API)")
     
-    api_key = st.secrets["wix_api"]["api_key"]
-    uploaded_file_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="wix_erp_auto")
-
-    if uploaded_file_erp:
-        if 'wix_sync_state' not in st.session_state:
-            st.session_state.wix_sync_state = 'upload'
-
-        if st.button('🔍 1. Analizar Diferencias', key="analyze_wix"):
-            with st.spinner('Conectando a Wix y descargando catálogo...'):
-                df_wix_live = fetch_wix_products_backup(api_key)
+    st.info("💡 Esta opción sincroniza automáticamente tus productos de Wix con el ERP sin necesidad de cargar archivos CSV de Wix.")
+    
+    # Intentar cargar credenciales desde secrets
+    try:
+        wix_api_key_default = st.secrets["wix_api"]["api_key"]
+        wix_site_id_default = st.secrets["wix_api"]["site_id"]
+        secrets_available = True
+        st.success("✅ Credenciales cargadas desde secrets")
+    except:
+        wix_api_key_default = ""
+        wix_site_id_default = ""
+        secrets_available = False
+    
+    # Inputs para credenciales de Wix
+    with st.expander("🔑 Configuración de API de Wix", expanded=not secrets_available):
+        if secrets_available:
+            st.info("🔒 Las credenciales se han cargado automáticamente desde la configuración segura. Puedes sobrescribirlas si lo necesitas.")
+        
+        wix_api_key = st.text_input(
+            "API Key de Wix", 
+            value=wix_api_key_default,
+            type="password",
+            help="Tu API Key de Wix Stores (cargada automáticamente si está configurada)",
+            key="wix_api_key_input"
+        )
+        wix_site_id = st.text_input(
+            "Site ID de Wix",
+            value=wix_site_id_default,
+            help="El ID de tu sitio Wix (cargado automáticamente si está configurado)",
+            key="wix_site_id_input"
+        )
+    
+    # Upload del archivo ERP
+    uploaded_file_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="wix_api_erp")
+    
+    if wix_api_key and wix_site_id and uploaded_file_erp:
+        
+        # Botón para iniciar sincronización
+        if st.button('🚀 Sincronizar con Wix', key="wix_api_sync"):
             
-            if df_wix_live is not None and not df_wix_live.empty:
-                with st.spinner('Cruzando datos con el ERP...'):
-                    try:
-                        data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
-                        data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
-                        data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us06"]]
-                        data_ERP['us06'] = data_ERP['us06'].fillna(0).astype(int)
-                        data_ERP['Valuni'] = data_ERP['Valuni'].fillna(0).astype(float)
-                        data_ERP.rename(columns={'Codpro': 'sku'}, inplace=True)
-                        data_ERP['sku'] = data_ERP['sku'].astype(str).str.strip()
-                        
-                        merged = pd.merge(df_wix_live, data_ERP, on='sku', how='inner')
-                        
-                        merged['diff_price'] = np.abs(merged['current_price'] - merged['Valuni']) > 0.01
-                        merged['diff_stock'] = merged['current_stock'] != merged['us06']
-                        
-                        to_update = merged[merged['diff_price'] | merged['diff_stock']].copy()
-                        
-                        st.session_state.wix_to_update = to_update
-                        st.session_state.wix_sync_state = 'analyzed'
-                        
-                        st.success(f"Análisis completado. Total productos en Wix: {len(df_wix_live)}. Productos encontrados en ERP: {len(merged)}.")
-                        
-                    except Exception as e:
-                        st.error(f"Error procesando ERP: {e}")
-
-        if st.session_state.get('wix_sync_state') == 'analyzed':
-            df_update = st.session_state.wix_to_update
+            # Configurar headers
+            headers = {
+                'Authorization': wix_api_key,
+                'wix-site-id': wix_site_id,
+                'Content-Type': 'application/json'
+            }
             
-            if df_update.empty:
-                st.info("✅ ¡Todo está sincronizado! No hay diferencias.")
-            else:
-                st.warning(f"⚠️ Se encontraron **{len(df_update)}** productos con diferencias.")
-                
-                st.dataframe(
-                    df_update[['sku', 'name', 'current_price', 'Valuni', 'current_stock', 'us06']]
-                    .rename(columns={'current_price': 'Precio Wix', 'Valuni': 'Precio ERP', 'current_stock': 'Stock Wix', 'us06': 'Stock ERP'})
-                )
-                
-                st.write("---")
-                st.write("¿Estás seguro de aplicar estos cambios en el sitio de BACKUP?")
-                
-                if st.button("🚀 2. Ejecutar Sincronización"):
-                    progress_bar = st.progress(0, text="Iniciando actualización...")
+            base_url = "https://www.wixapis.com/stores"
+            
+            with st.spinner('🌐 Conectando con Wix y descargando productos...'):
+                try:
+                    # ============================================================
+                    # PASO 1: CARGAR DATOS DEL ERP
+                    # ============================================================
+                    st.info("📂 Paso 1/5: Cargando datos del ERP...")
+                    
+                    data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
+                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
+                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02"]]
+                    data_ERP['us01'] = data_ERP['us01'].fillna(0)
+                    data_ERP['us02'] = data_ERP['us02'].fillna(0)
+                    data_ERP["Inventario_Bogota"] = data_ERP["us01"] + data_ERP["us02"]
+                    data_ERP = data_ERP[["Codpro", "Valuni", "Inventario_Bogota"]]
+                    data_ERP.rename(columns={'Codpro': 'SKU', 'Valuni': 'Precio', 'Inventario_Bogota': 'Inventario'}, inplace=True)
+                    data_ERP['SKU'] = data_ERP['SKU'].astype(str)
+                    
+                    st.success(f"✅ ERP cargado: {len(data_ERP)} productos")
+                    
+                    # ============================================================
+                    # PASO 2: DESCARGAR PRODUCTOS DE WIX
+                    # ============================================================
+                    st.info("🌐 Paso 2/5: Descargando productos de Wix...")
+                    
+                    all_products = []
+                    offset = 0
+                    limit = 100
+                    url = f"{base_url}/v1/products/query"
+                    
+                    progress_bar = st.progress(0)
                     status_text = st.empty()
-                    total_items = len(df_update)
-                    success_count = 0
-                    errors = []
                     
-                    # --- CORRECCIÓN AQUÍ: Usamos enumerate para tener un índice limpio (i) ---
-                    for i, (index, row) in enumerate(df_update.iterrows()):
-                        new_p = row['Valuni'] if row['diff_price'] else None
-                        new_s = row['us06'] if row['diff_stock'] else None
+                    # Primera llamada para obtener el total
+                    payload = {
+                        "includeHiddenProducts": True,
+                        "query": {"paging": {"limit": limit, "offset": 0}}
+                    }
+                    
+                    response = requests.post(url, headers=headers, json=payload, timeout=30)
+                    
+                    if response.status_code != 200:
+                        st.error(f"❌ Error al conectar con Wix: {response.status_code}")
+                        st.code(response.text)
+                        st.stop()
+                    
+                    data = response.json()
+                    total_products = data.get("totalResults", 0)
+                    all_products.extend(data.get("products", []))
+                    
+                    status_text.text(f"Descargados: {len(all_products)}/{total_products}")
+                    progress_bar.progress(min(len(all_products) / total_products, 1.0))
+                    
+                    # Continuar descargando el resto
+                    offset = limit
+                    while len(all_products) < total_products:
+                        payload["query"]["paging"]["offset"] = offset
                         
-                        status_text.text(f"Actualizando ({i+1}/{total_items}): {row['sku']}...")
-                        
-                        ok, msg = update_wix_product_single(api_key, row['id'], new_price=new_p, new_stock=new_s)
-                        
-                        if ok:
-                            success_count += 1
+                        response = requests.post(url, headers=headers, json=payload, timeout=30)
+                        if response.status_code == 200:
+                            data = response.json()
+                            all_products.extend(data.get("products", []))
+                            
+                            status_text.text(f"Descargados: {len(all_products)}/{total_products}")
+                            progress_bar.progress(min(len(all_products) / total_products, 1.0))
                         else:
-                            errors.append(f"{row['sku']}: {msg}")
+                            st.warning(f"⚠️ Error en lote (offset {offset}): {response.status_code}")
+                            break
                         
-                        # Calculamos progreso asegurando que no pase de 1.0
-                        progreso = min((i + 1) / total_items, 1.0)
-                        progress_bar.progress(progreso)
+                        offset += limit
+                        time.sleep(0.3)
+                    
+                    st.success(f"✅ Productos descargados: {len(all_products)}")
+                    
+                    # ============================================================
+                    # PASO 3: PROCESAR DATOS DE WIX
+                    # ============================================================
+                    st.info("🔄 Paso 3/5: Procesando datos de Wix...")
+                    
+                    wix_records = []
+                    for product in all_products:
+                        product_id = product.get('id')
+                        sku = str(product.get('sku', ''))
+                        visible = product.get('visible', False)
                         
-                        # Pausa muy leve
-                        time.sleep(0.05)
+                        price_data = product.get('price', {})
+                        current_price = price_data.get('price', 0)
+                        
+                        stock_data = product.get('stock', {})
+                        current_quantity = stock_data.get('quantity', 0)
+                        
+                        wix_records.append({
+                            'product_id': product_id,
+                            'SKU': sku,
+                            'current_price': current_price,
+                            'current_quantity': current_quantity,
+                            'visible': visible
+                        })
                     
-                    progress_bar.empty()
-                    status_text.empty()
+                    wix_df = pd.DataFrame(wix_records)
                     
-                    if errors:
-                        st.error(f"Se actualizaron {success_count} productos, pero hubo {len(errors)} errores.")
-                        with st.expander("Ver errores"):
-                            for e in errors:
-                                st.write(e)
-                    else:
-                        st.balloons()
-                        st.success(f"✅ ¡Éxito! Se actualizaron {success_count} productos correctamente.")
+                    # ============================================================
+                    # PASO 4: HACER MERGE
+                    # ============================================================
+                    st.info("🔗 Paso 4/5: Combinando datos...")
                     
-                    st.session_state.wix_sync_state = 'upload'
-
+                    merged_data = pd.merge(wix_df, data_ERP, on='SKU', how='inner')
+                    merged_data['Precio'].fillna(0, inplace=True)
+                    merged_data['Inventario'].fillna(0, inplace=True)
+                    merged_data['should_be_visible'] = merged_data['Inventario'] > 0
+                    
+                    merged_data['needs_price_update'] = merged_data['current_price'] != merged_data['Precio']
+                    merged_data['needs_inventory_update'] = merged_data['current_quantity'] != merged_data['Inventario']
+                    merged_data['needs_visibility_update'] = merged_data['visible'] != merged_data['should_be_visible']
+                    
+                    merged_data['needs_update'] = (
+                        merged_data['needs_price_update'] | 
+                        merged_data['needs_inventory_update'] | 
+                        merged_data['needs_visibility_update']
+                    )
+                    
+                    to_update = merged_data[merged_data['needs_update'] == True]
+                    
+                    st.success(f"✅ Productos que requieren actualización: {len(to_update)}")
+                    
+                    if len(to_update) == 0:
+                        st.info("🎉 Todos los productos están actualizados. No se requieren cambios.")
+                        st.stop()
+                    
+                    # Mostrar preview
+                    st.subheader("📋 Preview de Cambios")
+                    preview_df = to_update[['SKU', 'current_price', 'Precio', 'current_quantity', 'Inventario', 'visible', 'should_be_visible']].head(20)
+                    st.dataframe(preview_df)
+                    
+                    # ============================================================
+                    # PASO 5: ACTUALIZAR PRODUCTOS
+                    # ============================================================
+                    st.info("🚀 Paso 5/5: Actualizando productos en Wix...")
+                    
+                    progress_bar_update = st.progress(0)
+                    status_text_update = st.empty()
+                    
+                    stats = {'success': 0, 'failed': 0, 'errors': []}
+                    total_to_update = len(to_update)
+                    
+                    for idx, row in to_update.iterrows():
+                        product_id = row['product_id']
+                        sku = row['SKU']
+                        new_price = float(row['Precio'])
+                        new_quantity = int(row['Inventario'])
+                        new_visible = bool(row['should_be_visible'])
+                        
+                        status_text_update.text(f"Actualizando {stats['success'] + stats['failed'] + 1}/{total_to_update}: SKU {sku}")
+                        
+                        # Obtener detalles del producto (revision y variant_id)
+                        try:
+                            details_url = f"{base_url}/v3/products/{product_id}"
+                            details_response = requests.get(details_url, headers=headers, timeout=10)
+                            
+                            if details_response.status_code != 200:
+                                stats['failed'] += 1
+                                stats['errors'].append({'sku': sku, 'error': 'No se pudo obtener detalles'})
+                                continue
+                            
+                            details_data = details_response.json()
+                            product_details = details_data.get('product', {})
+                            revision = product_details.get('revision', '1')
+                            
+                            variants_info = product_details.get('variantsInfo', {})
+                            variants = variants_info.get('variants', [])
+                            variant_id = variants[0].get('id') if variants else None
+                            
+                            if not variant_id:
+                                stats['failed'] += 1
+                                stats['errors'].append({'sku': sku, 'error': 'No se encontró variant_id'})
+                                continue
+                            
+                            # Actualizar producto
+                            update_url = f"{base_url}/v3/products-with-inventory/{product_id}"
+                            update_payload = {
+                                "product": {
+                                    "id": product_id,
+                                    "revision": revision,
+                                    "visible": new_visible,
+                                    "variantsInfo": {
+                                        "variants": [{
+                                            "id": variant_id,
+                                            "choices": [],
+                                            "price": {
+                                                "actualPrice": {
+                                                    "amount": str(new_price)
+                                                }
+                                            }
+                                        }]
+                                    }
+                                }
+                            }
+                            
+                            update_response = requests.patch(update_url, headers=headers, json=update_payload, timeout=10)
+                            
+                            if update_response.status_code == 200:
+                                stats['success'] += 1
+                            else:
+                                stats['failed'] += 1
+                                error_msg = update_response.json().get('message', 'Error desconocido')
+                                stats['errors'].append({'sku': sku, 'error': error_msg})
+                            
+                            time.sleep(0.3)  # Rate limiting
+                            
+                        except Exception as e:
+                            stats['failed'] += 1
+                            stats['errors'].append({'sku': sku, 'error': str(e)})
+                        
+                        progress_bar_update.progress((stats['success'] + stats['failed']) / total_to_update)
+                    
+                    # ============================================================
+                    # MOSTRAR RESULTADOS
+                    # ============================================================
+                    st.success("✅ ¡Sincronización completada!")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Total Procesados", total_to_update)
+                    with col2:
+                        st.metric("✅ Exitosos", stats['success'])
+                    with col3:
+                        st.metric("❌ Fallidos", stats['failed'])
+                    
+                    if stats['errors']:
+                        st.error("🔴 Productos con errores:")
+                        error_df = pd.DataFrame(stats['errors'])
+                        st.dataframe(error_df)
+                    
+                    # Generar reporte descargable
+                    report_df = to_update[['SKU', 'current_price', 'Precio', 'current_quantity', 'Inventario', 'visible', 'should_be_visible']]
+                    report_csv = report_df.to_csv(index=False, encoding='utf-8-sig')
+                    
+                    st.download_button(
+                        label="📥 Descargar Reporte Completo",
+                        data=report_csv,
+                        file_name=f"wix_sync_report_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv"
+                    )
+                    
+                except Exception as e:
+                    st.error(f"❌ Error durante la sincronización: {str(e)}")
+                    st.code(str(e))
 
 # --- APLICACIÓN PRINCIPAL (NAVEGACIÓN) ---
 def main():
+    # Mostrar logo en la barra lateral
     try:
         image = Image.open("logo_transparente.png")
         st.sidebar.image(image, use_container_width=True)
@@ -484,53 +733,38 @@ def main():
         st.sidebar.warning("Logo no encontrado.")
 
     st.sidebar.title("Menú de Navegación")
-    st.sidebar.markdown("Selecciona la plataforma:")
+    st.sidebar.markdown("Selecciona la plataforma que deseas actualizar:")
 
+    # Menú de selección en la barra lateral
     opciones = [
-        "Mercado Libre",
+        "Mercado Libre - Medellín", 
+        "Mercado Libre - Bogotá",
         "Falabella",
-        "Rappi - Bogotá",
-        "Rappi - Barranquilla",
-        "Rappi - Medellín",
-        "Wix (Manual - CSV)",
-        "Wix Automático (Backup)" # Nueva opción
+        "Rappi Av.19, Blv y Cll 74",
+        "Rappi Bvista y Oviedo",
+        "Wix (CSV)",
+        "Wix (API)"
     ]
     opcion = st.sidebar.selectbox("Plataforma:", opciones)
 
+    # Título principal de la aplicación
     st.title("🚀 MarketMaster")
 
-    if opcion == "Mercado Libre":
+    # Lógica para mostrar la página correcta según la selección
+    if opcion == "Mercado Libre - Medellín":
+        pagina_meli_medellin()
+    elif opcion == "Mercado Libre - Bogotá":
         pagina_meli_bogota()
     elif opcion == "Falabella":
         pagina_falabella()
-    elif opcion == "Rappi - Bogotá":
-        pagina_rappi_ciudad(
-            ciudad_nombre="Bogotá",
-            titulo_seccion="Bogotá (Av.19 y Blv)",
-            tiendas={900243006: 'us01', 900243075: 'us02'},
-            erp_cols=["Codpro", "Nompro", "Valuni", "us01", "us02"],
-            key_suffix="bog"
-        )
-    elif opcion == "Rappi - Barranquilla":
-        pagina_rappi_ciudad(
-            ciudad_nombre="Barranquilla",
-            titulo_seccion="Barranquilla (Bvista y Cll 74)",
-            tiendas={900243002: 'us04', 900246112: 'us03'},
-            erp_cols=["Codpro", "Nompro", "Valuni", "us03", "us04"],
-            key_suffix="bqa"
-        )
-    elif opcion == "Rappi - Medellín":
-        pagina_rappi_ciudad(
-            ciudad_nombre="Medellín",
-            titulo_seccion="Medellín (Oviedo)",
-            tiendas={900418701: 'us05'},
-            erp_cols=["Codpro", "Nompro", "Valuni", "us05"],
-            key_suffix="med"
-        )
-    elif opcion == "Wix (Manual - CSV)":
-        pagina_wix_manual()
-    elif opcion == "Wix Automático (Backup)":
-        pagina_wix_automatizada()
+    elif opcion == "Rappi Av.19, Blv y Cll 74":
+        pagina_rappi_av19_blv_cll74()
+    elif opcion == "Rappi Bvista y Oviedo":
+        pagina_rappi_bvista_oviedo()
+    elif opcion == "Wix (CSV)":
+        pagina_wix()
+    elif opcion == "Wix (API)":
+        pagina_wix_api()
 
     st.sidebar.info("Esta app centraliza la actualización de inventarios y precios en múltiples plataformas.")
 
