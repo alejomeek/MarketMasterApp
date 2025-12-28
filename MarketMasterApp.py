@@ -455,10 +455,11 @@ def pagina_wix():
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
                     
                     data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
-                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us06"]]
-                    data_ERP['us06'] = data_ERP['us06'].fillna(0)
-                    data_ERP["Inventario_Wix"] = data_ERP["us06"]
-                    data_ERP.drop(["us06"], axis=1, inplace=True)
+                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02"]]
+                    data_ERP['us01'] = data_ERP['us01'].fillna(0)
+                    data_ERP['us02'] = data_ERP['us02'].fillna(0)
+                    data_ERP["Inventario_Wix"] = data_ERP["us01"] + data_ERP["us02"]
+                    data_ERP.drop(["us01", "us02"], axis=1, inplace=True)
                     data_ERP.rename(columns={'Codpro': 'sku'}, inplace=True)
                     data_ERP['sku'] = data_ERP['sku'].astype(str)
 
