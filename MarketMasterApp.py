@@ -15,14 +15,13 @@ st.set_page_config(
 # --- LÓGICA PARA MERCADO LIBRE (VERSIÓN ACTUALIZADA CON NUEVAS COLUMNAS) ---
 def pagina_meli_cedi_oviedo():
     st.markdown("### 🛒 Mercado Libre - Cedi + Oviedo")
-    
+
     # Nuevas columnas actualizadas según el nuevo formato de Mercado Libre
     column_names = [
         'FAMILY_ID', 'ITEM_ID', 'PRODUCT_NUMBER', 'VARIATION_ID', 'SKU', 'TITLE', 'VARIATIONS',
         'STORE_STOCK_QUANTITY_71348291#COP1326882072', 'STORE_STOCK_QUANTITY_71843625#COP1326882074',
         'STORE_STOCK_QUANTITY_76644462#COP1326882075', 'STORE_STOCK_QUANTITY_71348293#COP1326882073',
-        'TOTAL_STOCK_ALL_STORES', 'CHANNEL', 'MARKETPLACE_PRICE', 'MSHOPS_PRICE', 'MSHOPS_PRICE_SYNC',
-        'CURRENCY_ID', 'LISTING_TYPE', 'FEE_PER_SALE_MARKETPLACE', 'FEE_PER_SALE_MSHOPS'
+        'TOTAL_STOCK_ALL_STORES', 'STOCK_FULL', 'PRICE', 'CURRENCY_ID'
     ]
 
     uploaded_file_meli = st.file_uploader("📤 Cargar archivo Excel de Mercado Libre", type=['xlsx'], key="meli_bog_excel")
@@ -33,6 +32,42 @@ def pagina_meli_cedi_oviedo():
             with st.spinner('Procesando archivos...'):
                 try:
                     data_MELI = pd.read_excel(uploaded_file_meli, header=None, skiprows=6, names=column_names, sheet_name="Publicaciones")
+
+                    # Validación estricta del schema
+                    expected_columns = [
+                        'FAMILY_ID', 'ITEM_ID', 'PRODUCT_NUMBER', 'VARIATION_ID', 'SKU', 'TITLE', 'VARIATIONS',
+                        'STORE_STOCK_QUANTITY_71348291#COP1326882072', 'STORE_STOCK_QUANTITY_71843625#COP1326882074',
+                        'STORE_STOCK_QUANTITY_76644462#COP1326882075', 'STORE_STOCK_QUANTITY_71348293#COP1326882073',
+                        'TOTAL_STOCK_ALL_STORES', 'STOCK_FULL', 'PRICE', 'CURRENCY_ID'
+                    ]
+
+                    if list(data_MELI.columns) != expected_columns:
+                        st.error("""
+    ❌ **Error: La plantilla de Mercado Libre no tiene el esquema esperado.**
+
+    **Se esperaban 15 columnas en este orden:**
+    1. FAMILY_ID
+    2. ITEM_ID
+    3. PRODUCT_NUMBER
+    4. VARIATION_ID
+    5. SKU
+    6. TITLE
+    7. VARIATIONS
+    8. STORE_STOCK_QUANTITY_71348291#COP1326882072
+    9. STORE_STOCK_QUANTITY_71843625#COP1326882074
+    10. STORE_STOCK_QUANTITY_76644462#COP1326882075
+    11. STORE_STOCK_QUANTITY_71348293#COP1326882073
+    12. TOTAL_STOCK_ALL_STORES
+    13. STOCK_FULL
+    14. PRICE
+    15. CURRENCY_ID
+
+    **Por favor:**
+    - Descarga la plantilla más reciente desde tu panel de Mercado Libre
+    - O escribe a Alejandro o envía mensaje en el grupo de WhatsApp de MarketMaster
+    """)
+                        return  # Detener ejecución
+
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
 
                     # --- INICIO DE LA LÓGICA DE LIMPIEZA DE DATOS ---
@@ -62,9 +97,9 @@ def pagina_meli_cedi_oviedo():
                     # --- FIN DE LA LÓGICA DE LIMPIEZA DE DATOS ---
 
                     merged_data = pd.merge(data_MELI, data_ERP, on='SKU', how='left')
-                    merged_data['Original_Price'] = merged_data['MARKETPLACE_PRICE']
+                    merged_data['Original_Price'] = merged_data['PRICE']
                     merged_data['original_order'] = merged_data.index
-                    
+
                     grouped = merged_data.groupby('ITEM_ID')
                     processed_groups = []
                     for name, group in grouped:
@@ -77,8 +112,7 @@ def pagina_meli_cedi_oviedo():
                             # Actualizar inventario us05
                             group.loc[:, "STORE_STOCK_QUANTITY_76644462#COP1326882075"] = group["Inventario_us05"]
                             # Actualizar precios
-                            group.loc[:, "MARKETPLACE_PRICE"] = group["Valuni"]
-                            group.loc[:, "MSHOPS_PRICE"] = group["Valuni"]
+                            group.loc[:, "PRICE"] = group["Valuni"]
                         
                         elif group.shape[0] > 1:
                             # Columnas que siempre son 0
@@ -88,21 +122,20 @@ def pagina_meli_cedi_oviedo():
                             group.loc[group.SKU.notna(), "STORE_STOCK_QUANTITY_71843625#COP1326882074"] = group.loc[group.SKU.notna(), "Inventario_us06"]
                             # Actualizar inventario us05 para variaciones con SKU
                             group.loc[group.SKU.notna(), "STORE_STOCK_QUANTITY_76644462#COP1326882075"] = group.loc[group.SKU.notna(), "Inventario_us05"]
-                            
+
                             variations_with_price = group.loc[group.SKU.notna() & group.Valuni.notna()]
-                            
+
                             if not variations_with_price.empty:
                                 price_to_set = variations_with_price['Valuni'].iloc[0]
-                                
-                                group.loc[group.SKU.isna(), "MARKETPLACE_PRICE"] = price_to_set
-                                group.loc[group.SKU.isna(), "MSHOPS_PRICE"] = price_to_set
+
+                                group.loc[group.SKU.isna(), "PRICE"] = price_to_set
                         
                         processed_groups.append(group)
 
                     final_df = pd.concat(processed_groups)
-                    final_df['MARKETPLACE_PRICE'] = final_df['MARKETPLACE_PRICE'].fillna(final_df['Original_Price'])
+                    final_df['PRICE'] = final_df['PRICE'].fillna(final_df['Original_Price'])
                     final_df = final_df.sort_values('original_order')
-                    
+
                     # Asegurar que las columnas de inventario que siempre son 0 se mantengan en 0
                     final_df['STORE_STOCK_QUANTITY_71348291#COP1326882072'] = 0
                     final_df['STORE_STOCK_QUANTITY_71348293#COP1326882073'] = 0
@@ -134,14 +167,13 @@ def pagina_meli_cedi_oviedo():
 
 def pagina_meli_av19_bulevar_oviedo():
     st.markdown("### 🛒 Mercado Libre - Av. 19 + Bulevar + Oviedo")
-    
+
     # Nuevas columnas actualizadas según el nuevo formato de Mercado Libre
     column_names = [
         'FAMILY_ID', 'ITEM_ID', 'PRODUCT_NUMBER', 'VARIATION_ID', 'SKU', 'TITLE', 'VARIATIONS',
         'STORE_STOCK_QUANTITY_71348291#COP1326882072', 'STORE_STOCK_QUANTITY_71843625#COP1326882074',
         'STORE_STOCK_QUANTITY_76644462#COP1326882075', 'STORE_STOCK_QUANTITY_71348293#COP1326882073',
-        'TOTAL_STOCK_ALL_STORES', 'CHANNEL', 'MARKETPLACE_PRICE', 'MSHOPS_PRICE', 'MSHOPS_PRICE_SYNC',
-        'CURRENCY_ID', 'LISTING_TYPE', 'FEE_PER_SALE_MARKETPLACE', 'FEE_PER_SALE_MSHOPS'
+        'TOTAL_STOCK_ALL_STORES', 'STOCK_FULL', 'PRICE', 'CURRENCY_ID'
     ]
 
     uploaded_file_meli = st.file_uploader("📤 Cargar archivo Excel de Mercado Libre", type=['xlsx'], key="meli_av19_excel")
@@ -152,28 +184,64 @@ def pagina_meli_av19_bulevar_oviedo():
             with st.spinner('Procesando archivos...'):
                 try:
                     data_MELI = pd.read_excel(uploaded_file_meli, header=None, skiprows=6, names=column_names, sheet_name="Publicaciones")
+
+                    # Validación estricta del schema
+                    expected_columns = [
+                        'FAMILY_ID', 'ITEM_ID', 'PRODUCT_NUMBER', 'VARIATION_ID', 'SKU', 'TITLE', 'VARIATIONS',
+                        'STORE_STOCK_QUANTITY_71348291#COP1326882072', 'STORE_STOCK_QUANTITY_71843625#COP1326882074',
+                        'STORE_STOCK_QUANTITY_76644462#COP1326882075', 'STORE_STOCK_QUANTITY_71348293#COP1326882073',
+                        'TOTAL_STOCK_ALL_STORES', 'STOCK_FULL', 'PRICE', 'CURRENCY_ID'
+                    ]
+
+                    if list(data_MELI.columns) != expected_columns:
+                        st.error("""
+    ❌ **Error: La plantilla de Mercado Libre no tiene el esquema esperado.**
+
+    **Se esperaban 15 columnas en este orden:**
+    1. FAMILY_ID
+    2. ITEM_ID
+    3. PRODUCT_NUMBER
+    4. VARIATION_ID
+    5. SKU
+    6. TITLE
+    7. VARIATIONS
+    8. STORE_STOCK_QUANTITY_71348291#COP1326882072
+    9. STORE_STOCK_QUANTITY_71843625#COP1326882074
+    10. STORE_STOCK_QUANTITY_76644462#COP1326882075
+    11. STORE_STOCK_QUANTITY_71348293#COP1326882073
+    12. TOTAL_STOCK_ALL_STORES
+    13. STOCK_FULL
+    14. PRICE
+    15. CURRENCY_ID
+
+    **Por favor:**
+    - Descarga la plantilla más reciente desde tu panel de Mercado Libre
+    - O escribe a Alejandro o envía mensaje en el grupo de WhatsApp de MarketMaster
+    """)
+                        return  # Detener ejecución
+
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
 
                     # --- INICIO DE LA LÓGICA DE LIMPIEZA DE DATOS ---
                     data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
-                    
+
                     # Cargar columnas necesarias: us01 (71348293), us02 (71348291), us05 (76644462)
                     data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02", "us05"]]
                     data_ERP['us01'] = data_ERP['us01'].fillna(0)
                     data_ERP['us02'] = data_ERP['us02'].fillna(0)
                     data_ERP['us05'] = data_ERP['us05'].fillna(0)
-                    
+
                     data_ERP["Inventario_us01"] = data_ERP["us01"]
                     data_ERP["Inventario_us02"] = data_ERP["us02"]
                     data_ERP["Inventario_us05"] = data_ERP["us05"]
-                    
+
                     data_ERP = data_ERP.drop(["us01", "us02", "us05"], axis=1)
                     data_ERP.rename(columns={'Codpro': 'SKU'}, inplace=True)
 
                     # Conversión inicial a texto
                     data_MELI['SKU'] = data_MELI['SKU'].astype(str)
                     data_ERP['SKU'] = data_ERP['SKU'].astype(str)
-                    
+
                     # Limpieza de ".0"
                     data_MELI['SKU'] = data_MELI['SKU'].str.replace(r'\.0$', '', regex=True)
 
@@ -187,7 +255,7 @@ def pagina_meli_av19_bulevar_oviedo():
                     # --- FIN DE LA LÓGICA DE LIMPIEZA DE DATOS ---
 
                     merged_data = pd.merge(data_MELI, data_ERP, on='SKU', how='left')
-                    merged_data['Original_Price'] = merged_data['MARKETPLACE_PRICE']
+                    merged_data['Original_Price'] = merged_data['PRICE']
                     merged_data['original_order'] = merged_data.index
                     
                     grouped = merged_data.groupby('ITEM_ID')
@@ -202,10 +270,9 @@ def pagina_meli_av19_bulevar_oviedo():
                             group.loc[:, "STORE_STOCK_QUANTITY_71843625#COP1326882074"] = 0
                             # 76644462 -> us05
                             group.loc[:, "STORE_STOCK_QUANTITY_76644462#COP1326882075"] = group["Inventario_us05"]
-                            
+
                             # Actualizar precios
-                            group.loc[:, "MARKETPLACE_PRICE"] = group["Valuni"]
-                            group.loc[:, "MSHOPS_PRICE"] = group["Valuni"]
+                            group.loc[:, "PRICE"] = group["Valuni"]
                         
                         elif group.shape[0] > 1:
                             # 71348291 -> us02
@@ -216,27 +283,26 @@ def pagina_meli_av19_bulevar_oviedo():
                             group.loc[group.SKU.notna(), "STORE_STOCK_QUANTITY_71843625#COP1326882074"] = 0
                             # 76644462 -> us05
                             group.loc[group.SKU.notna(), "STORE_STOCK_QUANTITY_76644462#COP1326882075"] = group.loc[group.SKU.notna(), "Inventario_us05"]
-                            
+
                             variations_with_price = group.loc[group.SKU.notna() & group.Valuni.notna()]
-                            
+
                             if not variations_with_price.empty:
                                 price_to_set = variations_with_price['Valuni'].iloc[0]
-                                
-                                group.loc[group.SKU.isna(), "MARKETPLACE_PRICE"] = price_to_set
-                                group.loc[group.SKU.isna(), "MSHOPS_PRICE"] = price_to_set
+
+                                group.loc[group.SKU.isna(), "PRICE"] = price_to_set
                         
                         processed_groups.append(group)
 
                     final_df = pd.concat(processed_groups)
-                    final_df['MARKETPLACE_PRICE'] = final_df['MARKETPLACE_PRICE'].fillna(final_df['Original_Price'])
+                    final_df['PRICE'] = final_df['PRICE'].fillna(final_df['Original_Price'])
                     final_df = final_df.sort_values('original_order')
-                    
+
                     # Asegurar que NO queden NaNs en las columnas que usamos
                     final_df['STORE_STOCK_QUANTITY_71348291#COP1326882072'] = final_df['STORE_STOCK_QUANTITY_71348291#COP1326882072'].fillna(0)
                     final_df['STORE_STOCK_QUANTITY_71348293#COP1326882073'] = final_df['STORE_STOCK_QUANTITY_71348293#COP1326882073'].fillna(0)
                     final_df['STORE_STOCK_QUANTITY_71843625#COP1326882074'] = 0
                     final_df['STORE_STOCK_QUANTITY_76644462#COP1326882075'] = final_df['STORE_STOCK_QUANTITY_76644462#COP1326882075'].fillna(0)
-                    
+
                     final_df['VARIATION_ID'] = final_df['VARIATION_ID'].apply(lambda x: str(int(x)) if pd.notna(x) else None)
                     final_df = final_df.drop(['Nompro', 'Valuni', 'Inventario_us01', 'Inventario_us02', 'Inventario_us05', 'original_order', 'Original_Price'], axis=1)
 
@@ -245,7 +311,7 @@ def pagina_meli_av19_bulevar_oviedo():
                     for r_idx, row_data in final_df.iterrows():
                         for c_idx, value in enumerate(row_data, start=1):
                             ws.cell(row=r_idx + 7, column=c_idx, value=value)
-                    
+
                     output = BytesIO()
                     wb.save(output)
                     output.seek(0)
@@ -267,8 +333,7 @@ def pagina_meli_av19_bulevar_cedi_oviedo():
         'FAMILY_ID', 'ITEM_ID', 'PRODUCT_NUMBER', 'VARIATION_ID', 'SKU', 'TITLE', 'VARIATIONS',
         'STORE_STOCK_QUANTITY_71348291#COP1326882072', 'STORE_STOCK_QUANTITY_71843625#COP1326882074',
         'STORE_STOCK_QUANTITY_76644462#COP1326882075', 'STORE_STOCK_QUANTITY_71348293#COP1326882073',
-        'TOTAL_STOCK_ALL_STORES', 'CHANNEL', 'MARKETPLACE_PRICE', 'MSHOPS_PRICE', 'MSHOPS_PRICE_SYNC',
-        'CURRENCY_ID', 'LISTING_TYPE', 'FEE_PER_SALE_MARKETPLACE', 'FEE_PER_SALE_MSHOPS'
+        'TOTAL_STOCK_ALL_STORES', 'STOCK_FULL', 'PRICE', 'CURRENCY_ID'
     ]
 
     uploaded_file_meli = st.file_uploader("📤 Cargar archivo Excel de Mercado Libre", type=['xlsx'], key="meli_4bod_excel")
@@ -279,6 +344,42 @@ def pagina_meli_av19_bulevar_cedi_oviedo():
             with st.spinner('Procesando archivos...'):
                 try:
                     data_MELI = pd.read_excel(uploaded_file_meli, header=None, skiprows=6, names=column_names, sheet_name="Publicaciones")
+
+                    # Validación estricta del schema
+                    expected_columns = [
+                        'FAMILY_ID', 'ITEM_ID', 'PRODUCT_NUMBER', 'VARIATION_ID', 'SKU', 'TITLE', 'VARIATIONS',
+                        'STORE_STOCK_QUANTITY_71348291#COP1326882072', 'STORE_STOCK_QUANTITY_71843625#COP1326882074',
+                        'STORE_STOCK_QUANTITY_76644462#COP1326882075', 'STORE_STOCK_QUANTITY_71348293#COP1326882073',
+                        'TOTAL_STOCK_ALL_STORES', 'STOCK_FULL', 'PRICE', 'CURRENCY_ID'
+                    ]
+
+                    if list(data_MELI.columns) != expected_columns:
+                        st.error("""
+    ❌ **Error: La plantilla de Mercado Libre no tiene el esquema esperado.**
+
+    **Se esperaban 15 columnas en este orden:**
+    1. FAMILY_ID
+    2. ITEM_ID
+    3. PRODUCT_NUMBER
+    4. VARIATION_ID
+    5. SKU
+    6. TITLE
+    7. VARIATIONS
+    8. STORE_STOCK_QUANTITY_71348291#COP1326882072
+    9. STORE_STOCK_QUANTITY_71843625#COP1326882074
+    10. STORE_STOCK_QUANTITY_76644462#COP1326882075
+    11. STORE_STOCK_QUANTITY_71348293#COP1326882073
+    12. TOTAL_STOCK_ALL_STORES
+    13. STOCK_FULL
+    14. PRICE
+    15. CURRENCY_ID
+
+    **Por favor:**
+    - Descarga la plantilla más reciente desde tu panel de Mercado Libre
+    - O escribe a Alejandro o envía mensaje en el grupo de WhatsApp de MarketMaster
+    """)
+                        return  # Detener ejecución
+
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
 
                     # --- INICIO DE LA LÓGICA DE LIMPIEZA DE DATOS ---
@@ -316,7 +417,7 @@ def pagina_meli_av19_bulevar_cedi_oviedo():
                     # --- FIN DE LA LÓGICA DE LIMPIEZA DE DATOS ---
 
                     merged_data = pd.merge(data_MELI, data_ERP, on='SKU', how='left')
-                    merged_data['Original_Price'] = merged_data['MARKETPLACE_PRICE']
+                    merged_data['Original_Price'] = merged_data['PRICE']
                     merged_data['original_order'] = merged_data.index
 
                     grouped = merged_data.groupby('ITEM_ID')
@@ -333,8 +434,7 @@ def pagina_meli_av19_bulevar_cedi_oviedo():
                             group.loc[:, "STORE_STOCK_QUANTITY_76644462#COP1326882075"] = group["Inventario_us05"]
 
                             # Actualizar precios
-                            group.loc[:, "MARKETPLACE_PRICE"] = group["Valuni"]
-                            group.loc[:, "MSHOPS_PRICE"] = group["Valuni"]
+                            group.loc[:, "PRICE"] = group["Valuni"]
 
                         elif group.shape[0] > 1:
                             # 71348291 -> us02
@@ -351,13 +451,12 @@ def pagina_meli_av19_bulevar_cedi_oviedo():
                             if not variations_with_price.empty:
                                 price_to_set = variations_with_price['Valuni'].iloc[0]
 
-                                group.loc[group.SKU.isna(), "MARKETPLACE_PRICE"] = price_to_set
-                                group.loc[group.SKU.isna(), "MSHOPS_PRICE"] = price_to_set
+                                group.loc[group.SKU.isna(), "PRICE"] = price_to_set
 
                         processed_groups.append(group)
 
                     final_df = pd.concat(processed_groups)
-                    final_df['MARKETPLACE_PRICE'] = final_df['MARKETPLACE_PRICE'].fillna(final_df['Original_Price'])
+                    final_df['PRICE'] = final_df['PRICE'].fillna(final_df['Original_Price'])
                     final_df = final_df.sort_values('original_order')
 
                     # Asegurar que NO queden NaNs en las columnas que usamos
