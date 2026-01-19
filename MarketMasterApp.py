@@ -32,7 +32,7 @@ def pagina_meli_cedi_oviedo():
             with st.spinner('Procesando archivos...'):
                 try:
                     # Primero leer SIN forzar nombres para validar
-                    data_MELI_raw = pd.read_excel(uploaded_file_meli, header=None, skiprows=6, sheet_name="Publicaciones")
+                    data_MELI_raw = pd.read_excel(uploaded_file_meli, header=None, skiprows=5, sheet_name="Publicaciones")
 
                     # Validación: verificar que tenga exactamente 15 columnas
                     if data_MELI_raw.shape[1] != 15:
@@ -189,7 +189,7 @@ def pagina_meli_av19_bulevar_oviedo():
             with st.spinner('Procesando archivos...'):
                 try:
                     # Primero leer SIN forzar nombres para validar
-                    data_MELI_raw = pd.read_excel(uploaded_file_meli, header=None, skiprows=6, sheet_name="Publicaciones")
+                    data_MELI_raw = pd.read_excel(uploaded_file_meli, header=None, skiprows=5, sheet_name="Publicaciones")
 
                     # Validación: verificar que tenga exactamente 15 columnas
                     if data_MELI_raw.shape[1] != 15:
@@ -354,7 +354,7 @@ def pagina_meli_av19_bulevar_cedi_oviedo():
             with st.spinner('Procesando archivos...'):
                 try:
                     # Primero leer SIN forzar nombres para validar
-                    data_MELI_raw = pd.read_excel(uploaded_file_meli, header=None, skiprows=6, sheet_name="Publicaciones")
+                    data_MELI_raw = pd.read_excel(uploaded_file_meli, header=None, skiprows=5, sheet_name="Publicaciones")
 
                     # Validación: verificar que tenga exactamente 15 columnas
                     if data_MELI_raw.shape[1] != 15:
