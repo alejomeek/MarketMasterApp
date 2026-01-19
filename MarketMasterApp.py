@@ -153,6 +153,7 @@ def pagina_meli_cedi_oviedo():
 
                     wb = load_workbook(uploaded_file_meli)
                     ws = wb['Publicaciones']
+                    final_df = final_df.reset_index(drop=True)
                     for r_idx, row_data in final_df.iterrows():
                         for c_idx, value in enumerate(row_data, start=1):
                             ws.cell(row=r_idx + 6, column=c_idx, value=value)
@@ -318,6 +319,7 @@ def pagina_meli_av19_bulevar_oviedo():
 
                     wb = load_workbook(uploaded_file_meli)
                     ws = wb['Publicaciones']
+                    final_df = final_df.reset_index(drop=True)
                     for r_idx, row_data in final_df.iterrows():
                         for c_idx, value in enumerate(row_data, start=1):
                             ws.cell(row=r_idx + 6, column=c_idx, value=value)
@@ -485,6 +487,7 @@ def pagina_meli_av19_bulevar_cedi_oviedo():
 
                     wb = load_workbook(uploaded_file_meli)
                     ws = wb['Publicaciones']
+                    final_df = final_df.reset_index(drop=True)
                     for r_idx, row_data in final_df.iterrows():
                         for c_idx, value in enumerate(row_data, start=1):
                             ws.cell(row=r_idx + 6, column=c_idx, value=value)
