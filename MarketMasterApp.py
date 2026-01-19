@@ -153,6 +153,13 @@ def pagina_meli_cedi_oviedo():
 
                     wb = load_workbook(uploaded_file_meli)
                     ws = wb['Publicaciones']
+                    
+                    # Limpiar todas las filas de datos existentes (desde fila 6 hasta el final)
+                    max_row = ws.max_row
+                    if max_row >= 6:
+                        ws.delete_rows(6, max_row - 5)
+                    
+                    # Ahora escribir los datos procesados
                     final_df = final_df.reset_index(drop=True)
                     for r_idx, row_data in final_df.iterrows():
                         for c_idx, value in enumerate(row_data, start=1):
@@ -319,6 +326,13 @@ def pagina_meli_av19_bulevar_oviedo():
 
                     wb = load_workbook(uploaded_file_meli)
                     ws = wb['Publicaciones']
+                    
+                    # Limpiar todas las filas de datos existentes (desde fila 6 hasta el final)
+                    max_row = ws.max_row
+                    if max_row >= 6:
+                        ws.delete_rows(6, max_row - 5)
+                    
+                    # Ahora escribir los datos procesados
                     final_df = final_df.reset_index(drop=True)
                     for r_idx, row_data in final_df.iterrows():
                         for c_idx, value in enumerate(row_data, start=1):
@@ -487,6 +501,13 @@ def pagina_meli_av19_bulevar_cedi_oviedo():
 
                     wb = load_workbook(uploaded_file_meli)
                     ws = wb['Publicaciones']
+                    
+                    # Limpiar todas las filas de datos existentes (desde fila 6 hasta el final)
+                    max_row = ws.max_row
+                    if max_row >= 6:
+                        ws.delete_rows(6, max_row - 5)
+                    
+                    # Ahora escribir los datos procesados
                     final_df = final_df.reset_index(drop=True)
                     for r_idx, row_data in final_df.iterrows():
                         for c_idx, value in enumerate(row_data, start=1):
