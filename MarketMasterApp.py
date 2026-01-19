@@ -31,21 +31,19 @@ def pagina_meli_cedi_oviedo():
         if st.button('🔄 Procesar MELI', key="meli_bog_process"):
             with st.spinner('Procesando archivos...'):
                 try:
-                    data_MELI = pd.read_excel(uploaded_file_meli, header=None, skiprows=6, names=column_names, sheet_name="Publicaciones")
+                    # Primero leer SIN forzar nombres para validar
+                    data_MELI_raw = pd.read_excel(uploaded_file_meli, header=None, skiprows=6, sheet_name="Publicaciones")
 
-                    # Validación estricta del schema
-                    expected_columns = [
-                        'FAMILY_ID', 'ITEM_ID', 'PRODUCT_NUMBER', 'VARIATION_ID', 'SKU', 'TITLE', 'VARIATIONS',
-                        'STORE_STOCK_QUANTITY_71348291#COP1326882072', 'STORE_STOCK_QUANTITY_71843625#COP1326882074',
-                        'STORE_STOCK_QUANTITY_76644462#COP1326882075', 'STORE_STOCK_QUANTITY_71348293#COP1326882073',
-                        'TOTAL_STOCK_ALL_STORES', 'STOCK_FULL', 'PRICE', 'CURRENCY_ID'
-                    ]
-
-                    if list(data_MELI.columns) != expected_columns:
-                        st.error("""
+                    # Validación: verificar que tenga exactamente 15 columnas
+                    if data_MELI_raw.shape[1] != 15:
+                        st.error(f"""
     ❌ **Error: La plantilla de Mercado Libre no tiene el esquema esperado.**
 
-    **Se esperaban 15 columnas en este orden:**
+    **Problema detectado:**
+    - El archivo tiene **{data_MELI_raw.shape[1]} columnas**
+    - Se esperaban **15 columnas**
+
+    **Se esperaban estas 15 columnas en este orden:**
     1. FAMILY_ID
     2. ITEM_ID
     3. PRODUCT_NUMBER
@@ -65,8 +63,15 @@ def pagina_meli_cedi_oviedo():
     **Por favor:**
     - Descarga la plantilla más reciente desde tu panel de Mercado Libre
     - O escribe a Alejandro o envía mensaje en el grupo de WhatsApp de MarketMaster
+
+    **Nota técnica:** Si estás usando una plantilla antigua, tiene columnas obsoletas como
+    CHANNEL, MARKETPLACE_PRICE, MSHOPS_PRICE, WARRANTY_TYPE, etc. que ya no se usan.
     """)
                         return  # Detener ejecución
+
+                    # Si pasa la validación, AHORA SÍ aplicamos los nombres
+                    data_MELI = data_MELI_raw.copy()
+                    data_MELI.columns = column_names
 
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
 
@@ -183,21 +188,19 @@ def pagina_meli_av19_bulevar_oviedo():
         if st.button('🔄 Procesar MELI (Av. 19 + Blv + Ovi)', key="meli_av19_process"):
             with st.spinner('Procesando archivos...'):
                 try:
-                    data_MELI = pd.read_excel(uploaded_file_meli, header=None, skiprows=6, names=column_names, sheet_name="Publicaciones")
+                    # Primero leer SIN forzar nombres para validar
+                    data_MELI_raw = pd.read_excel(uploaded_file_meli, header=None, skiprows=6, sheet_name="Publicaciones")
 
-                    # Validación estricta del schema
-                    expected_columns = [
-                        'FAMILY_ID', 'ITEM_ID', 'PRODUCT_NUMBER', 'VARIATION_ID', 'SKU', 'TITLE', 'VARIATIONS',
-                        'STORE_STOCK_QUANTITY_71348291#COP1326882072', 'STORE_STOCK_QUANTITY_71843625#COP1326882074',
-                        'STORE_STOCK_QUANTITY_76644462#COP1326882075', 'STORE_STOCK_QUANTITY_71348293#COP1326882073',
-                        'TOTAL_STOCK_ALL_STORES', 'STOCK_FULL', 'PRICE', 'CURRENCY_ID'
-                    ]
-
-                    if list(data_MELI.columns) != expected_columns:
-                        st.error("""
+                    # Validación: verificar que tenga exactamente 15 columnas
+                    if data_MELI_raw.shape[1] != 15:
+                        st.error(f"""
     ❌ **Error: La plantilla de Mercado Libre no tiene el esquema esperado.**
 
-    **Se esperaban 15 columnas en este orden:**
+    **Problema detectado:**
+    - El archivo tiene **{data_MELI_raw.shape[1]} columnas**
+    - Se esperaban **15 columnas**
+
+    **Se esperaban estas 15 columnas en este orden:**
     1. FAMILY_ID
     2. ITEM_ID
     3. PRODUCT_NUMBER
@@ -217,8 +220,15 @@ def pagina_meli_av19_bulevar_oviedo():
     **Por favor:**
     - Descarga la plantilla más reciente desde tu panel de Mercado Libre
     - O escribe a Alejandro o envía mensaje en el grupo de WhatsApp de MarketMaster
+
+    **Nota técnica:** Si estás usando una plantilla antigua, tiene columnas obsoletas como
+    CHANNEL, MARKETPLACE_PRICE, MSHOPS_PRICE, WARRANTY_TYPE, etc. que ya no se usan.
     """)
                         return  # Detener ejecución
+
+                    # Si pasa la validación, AHORA SÍ aplicamos los nombres
+                    data_MELI = data_MELI_raw.copy()
+                    data_MELI.columns = column_names
 
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
 
@@ -343,21 +353,19 @@ def pagina_meli_av19_bulevar_cedi_oviedo():
         if st.button('🔄 Procesar MELI (4 Bodegas)', key="meli_4bod_process"):
             with st.spinner('Procesando archivos...'):
                 try:
-                    data_MELI = pd.read_excel(uploaded_file_meli, header=None, skiprows=6, names=column_names, sheet_name="Publicaciones")
+                    # Primero leer SIN forzar nombres para validar
+                    data_MELI_raw = pd.read_excel(uploaded_file_meli, header=None, skiprows=6, sheet_name="Publicaciones")
 
-                    # Validación estricta del schema
-                    expected_columns = [
-                        'FAMILY_ID', 'ITEM_ID', 'PRODUCT_NUMBER', 'VARIATION_ID', 'SKU', 'TITLE', 'VARIATIONS',
-                        'STORE_STOCK_QUANTITY_71348291#COP1326882072', 'STORE_STOCK_QUANTITY_71843625#COP1326882074',
-                        'STORE_STOCK_QUANTITY_76644462#COP1326882075', 'STORE_STOCK_QUANTITY_71348293#COP1326882073',
-                        'TOTAL_STOCK_ALL_STORES', 'STOCK_FULL', 'PRICE', 'CURRENCY_ID'
-                    ]
-
-                    if list(data_MELI.columns) != expected_columns:
-                        st.error("""
+                    # Validación: verificar que tenga exactamente 15 columnas
+                    if data_MELI_raw.shape[1] != 15:
+                        st.error(f"""
     ❌ **Error: La plantilla de Mercado Libre no tiene el esquema esperado.**
 
-    **Se esperaban 15 columnas en este orden:**
+    **Problema detectado:**
+    - El archivo tiene **{data_MELI_raw.shape[1]} columnas**
+    - Se esperaban **15 columnas**
+
+    **Se esperaban estas 15 columnas en este orden:**
     1. FAMILY_ID
     2. ITEM_ID
     3. PRODUCT_NUMBER
@@ -377,8 +385,15 @@ def pagina_meli_av19_bulevar_cedi_oviedo():
     **Por favor:**
     - Descarga la plantilla más reciente desde tu panel de Mercado Libre
     - O escribe a Alejandro o envía mensaje en el grupo de WhatsApp de MarketMaster
+
+    **Nota técnica:** Si estás usando una plantilla antigua, tiene columnas obsoletas como
+    CHANNEL, MARKETPLACE_PRICE, MSHOPS_PRICE, WARRANTY_TYPE, etc. que ya no se usan.
     """)
                         return  # Detener ejecución
+
+                    # Si pasa la validación, AHORA SÍ aplicamos los nombres
+                    data_MELI = data_MELI_raw.copy()
+                    data_MELI.columns = column_names
 
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
 
