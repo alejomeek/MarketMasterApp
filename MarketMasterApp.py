@@ -32,7 +32,7 @@ def pagina_meli_cedi_oviedo():
             with st.spinner('Procesando archivos...'):
                 try:
                     # Primero leer SIN forzar nombres para validar
-                    data_MELI_raw = pd.read_excel(uploaded_file_meli, header=None, skiprows=5, sheet_name="Publicaciones")
+                    data_MELI_raw = pd.read_excel(uploaded_file_meli, header=0, skiprows=range(1, 5), sheet_name="Publicaciones")
 
                     # Validación: verificar que tenga exactamente 15 columnas
                     if data_MELI_raw.shape[1] != 15:
@@ -155,7 +155,7 @@ def pagina_meli_cedi_oviedo():
                     ws = wb['Publicaciones']
                     for r_idx, row_data in final_df.iterrows():
                         for c_idx, value in enumerate(row_data, start=1):
-                            ws.cell(row=r_idx + 7, column=c_idx, value=value)
+                            ws.cell(row=r_idx + 6, column=c_idx, value=value)
                     
                     output = BytesIO()
                     wb.save(output)
@@ -189,7 +189,7 @@ def pagina_meli_av19_bulevar_oviedo():
             with st.spinner('Procesando archivos...'):
                 try:
                     # Primero leer SIN forzar nombres para validar
-                    data_MELI_raw = pd.read_excel(uploaded_file_meli, header=None, skiprows=5, sheet_name="Publicaciones")
+                    data_MELI_raw = pd.read_excel(uploaded_file_meli, header=0, skiprows=range(1, 5), sheet_name="Publicaciones")
 
                     # Validación: verificar que tenga exactamente 15 columnas
                     if data_MELI_raw.shape[1] != 15:
@@ -320,7 +320,7 @@ def pagina_meli_av19_bulevar_oviedo():
                     ws = wb['Publicaciones']
                     for r_idx, row_data in final_df.iterrows():
                         for c_idx, value in enumerate(row_data, start=1):
-                            ws.cell(row=r_idx + 7, column=c_idx, value=value)
+                            ws.cell(row=r_idx + 6, column=c_idx, value=value)
 
                     output = BytesIO()
                     wb.save(output)
@@ -354,7 +354,7 @@ def pagina_meli_av19_bulevar_cedi_oviedo():
             with st.spinner('Procesando archivos...'):
                 try:
                     # Primero leer SIN forzar nombres para validar
-                    data_MELI_raw = pd.read_excel(uploaded_file_meli, header=None, skiprows=5, sheet_name="Publicaciones")
+                    data_MELI_raw = pd.read_excel(uploaded_file_meli, header=0, skiprows=range(1, 5), sheet_name="Publicaciones")
 
                     # Validación: verificar que tenga exactamente 15 columnas
                     if data_MELI_raw.shape[1] != 15:
@@ -487,7 +487,7 @@ def pagina_meli_av19_bulevar_cedi_oviedo():
                     ws = wb['Publicaciones']
                     for r_idx, row_data in final_df.iterrows():
                         for c_idx, value in enumerate(row_data, start=1):
-                            ws.cell(row=r_idx + 7, column=c_idx, value=value)
+                            ws.cell(row=r_idx + 6, column=c_idx, value=value)
 
                     output = BytesIO()
                     wb.save(output)
