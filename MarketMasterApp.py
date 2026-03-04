@@ -762,6 +762,75 @@ def pagina_wix():
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
+def pagina_wix_av19_bulevar_cedi():
+    st.markdown("## 🌐 Wix - Av. 19 + Bulevar + Cedi")
+    column_names = [
+        'handleId', 'fieldType', 'name', 'description', 'productImageUrl', 'collection', 'sku', 'ribbon', 
+        'price', 'surcharge', 'visible', 'discountMode', 'discountValue', 'inventory', 'weight', 'cost',
+        'productOptionName1', 'productOptionType1', 'productOptionDescription1', 'productOptionName2', 'productOptionType2', 'productOptionDescription2',
+        'productOptionName3', 'productOptionType3', 'productOptionDescription3', 'productOptionName4', 'productOptionType4', 'productOptionDescription4',
+        'productOptionName5', 'productOptionType5', 'productOptionDescription5', 'productOptionName6', 'productOptionType6', 'productOptionDescription6',
+        'additionalInfoTitle1', 'additionalInfoDescription1', 'additionalInfoTitle2', 'additionalInfoDescription2',
+        'additionalInfoTitle3', 'additionalInfoDescription3', 'additionalInfoTitle4', 'additionalInfoDescription4',
+        'additionalInfoTitle5', 'additionalInfoDescription5', 'additionalInfoTitle6', 'additionalInfoDescription6',
+        'customTextField1', 'customTextCharLimit1', 'customTextMandatory1', 'customTextField2', 'customTextCharLimit2', 'customTextMandatory2', 'brand'
+    ]
+
+    uploaded_file_wix = st.file_uploader("📤 Cargar archivo CSV de Wix", type=['csv'], key="wix_av19_blv_cedi_csv")
+    uploaded_file_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="wix_av19_blv_cedi_erp")
+
+    if uploaded_file_wix and uploaded_file_erp:
+        if st.button('🔄 Procesar Wix (Av. 19 + Blv + Cedi)', key="wix_av19_blv_cedi_process"):
+            with st.spinner('Procesando archivos...'):
+                try:
+                    data_wix = pd.read_csv(uploaded_file_wix, header=0, dtype={'sku': str})
+                    data_wix.columns = column_names
+
+                    data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
+
+                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
+                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02", "us06"]]
+                    data_ERP['us01'] = data_ERP['us01'].fillna(0)
+                    data_ERP['us02'] = data_ERP['us02'].fillna(0)
+                    data_ERP['us06'] = data_ERP['us06'].fillna(0)
+                    # Av. 19 (us01) + Bulevar (us02) + Cedi (us06)
+                    data_ERP["Inventario_Wix"] = data_ERP["us01"] + data_ERP["us02"] + data_ERP["us06"]
+                    data_ERP.drop(["us01", "us02", "us06"], axis=1, inplace=True)
+                    data_ERP.rename(columns={'Codpro': 'sku'}, inplace=True)
+                    data_ERP['sku'] = data_ERP['sku'].astype(str)
+
+                    merged_data = pd.merge(data_wix, data_ERP, on='sku', how='left')
+                    merged_data['Valuni'].fillna(0, inplace=True)
+                    merged_data['Inventario_Wix'].fillna(0, inplace=True)
+                    merged_data['inventory'] = merged_data['Inventario_Wix']
+                    merged_data['price'] = merged_data['Valuni']
+                    merged_data = merged_data.drop(["Nompro", "Valuni", "Inventario_Wix"], axis=1)
+
+                    merged_data['visible'] = np.where(merged_data['inventory'] > 0, "TRUE", "FALSE")
+
+                    st.success("✅ ¡Archivo de Wix (Av. 19 + Blv + Cedi) procesado!")
+                    st.dataframe(merged_data.head())
+
+                    num_rows = merged_data.shape[0]
+                    max_rows_per_file = 4000
+                    num_files = (num_rows // max_rows_per_file) + (1 if num_rows % max_rows_per_file > 0 else 0)
+
+                    st.info(f"El archivo se dividirá en {num_files} parte(s).")
+
+                    for i in range(num_files):
+                        part = merged_data.iloc[i * max_rows_per_file : (i + 1) * max_rows_per_file]
+                        output = part.to_csv(index=False, encoding='utf-8-sig')
+                        st.download_button(
+                            label=f"⬇️ Descargar Parte {i+1}",
+                            data=output,
+                            file_name=f"Wix_Av19_Blv_Cedi_parte_{i+1}.csv",
+                            mime="text/csv",
+                            key=f"wix_av19_blv_cedi_download_{i}"
+                        )
+
+                except Exception as e:
+                    st.error(f"❌ Error al procesar: {e}")
+
 # --- APLICACIÓN PRINCIPAL (NAVEGACIÓN) ---
 def main():
     # Mostrar logo en la barra lateral
@@ -783,7 +852,8 @@ def main():
         "Rappi - Bogotá",
         "Rappi - Barranquilla",
         "Rappi - Medellín",
-        "Wix"
+        "Wix",
+        "Wix - Av. 19 + Bulevar + Cedi"
     ]
     opcion = st.sidebar.selectbox("Plataforma:", opciones)
 
@@ -825,6 +895,8 @@ def main():
         )
     elif opcion == "Wix":
         pagina_wix()
+    elif opcion == "Wix - Av. 19 + Bulevar + Cedi":
+        pagina_wix_av19_bulevar_cedi()
 
     st.sidebar.info("Esta app centraliza la actualización de inventarios y precios en múltiples plataformas.")
 
