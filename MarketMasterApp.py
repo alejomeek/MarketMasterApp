@@ -105,6 +105,12 @@ def pagina_meli_cedi_oviedo():
                     merged_data['Original_Price'] = merged_data['PRICE']
                     merged_data['original_order'] = merged_data.index
 
+                    # Permitir NaNs en estas columnas convirtiéndolas a float temporalmente
+                    merged_data['PRICE'] = merged_data['PRICE'].astype(float)
+                    for col in merged_data.columns:
+                        if "STORE_STOCK" in col:
+                            merged_data[col] = merged_data[col].astype(float)
+
                     grouped = merged_data.groupby('ITEM_ID')
                     processed_groups = []
                     for name, group in grouped:
@@ -275,6 +281,12 @@ def pagina_meli_av19_bulevar_oviedo():
                     merged_data = pd.merge(data_MELI, data_ERP, on='SKU', how='left')
                     merged_data['Original_Price'] = merged_data['PRICE']
                     merged_data['original_order'] = merged_data.index
+
+                    # Permitir NaNs en estas columnas convirtiéndolas a float temporalmente
+                    merged_data['PRICE'] = merged_data['PRICE'].astype(float)
+                    for col in merged_data.columns:
+                        if "STORE_STOCK" in col:
+                            merged_data[col] = merged_data[col].astype(float)
                     
                     grouped = merged_data.groupby('ITEM_ID')
                     processed_groups = []
@@ -450,6 +462,12 @@ def pagina_meli_av19_bulevar_cedi_oviedo():
                     merged_data = pd.merge(data_MELI, data_ERP, on='SKU', how='left')
                     merged_data['Original_Price'] = merged_data['PRICE']
                     merged_data['original_order'] = merged_data.index
+
+                    # Permitir NaNs en estas columnas convirtiéndolas a float temporalmente
+                    merged_data['PRICE'] = merged_data['PRICE'].astype(float)
+                    for col in merged_data.columns:
+                        if "STORE_STOCK" in col:
+                            merged_data[col] = merged_data[col].astype(float)
 
                     grouped = merged_data.groupby('ITEM_ID')
                     processed_groups = []
