@@ -105,11 +105,11 @@ def pagina_meli_cedi_oviedo():
                     merged_data['Original_Price'] = merged_data['PRICE']
                     merged_data['original_order'] = merged_data.index
 
-                    # Permitir NaNs en estas columnas convirtiéndolas a float temporalmente
-                    merged_data['PRICE'] = merged_data['PRICE'].astype(float)
+                    # Permitir NaNs y manejar strings como '-' convirtiéndolos numéricamente forzando errores a NaN
+                    merged_data['PRICE'] = pd.to_numeric(merged_data['PRICE'], errors='coerce')
                     for col in merged_data.columns:
                         if "STORE_STOCK" in col:
-                            merged_data[col] = merged_data[col].astype(float)
+                            merged_data[col] = pd.to_numeric(merged_data[col], errors='coerce')
 
                     grouped = merged_data.groupby('ITEM_ID')
                     processed_groups = []
@@ -282,11 +282,11 @@ def pagina_meli_av19_bulevar_oviedo():
                     merged_data['Original_Price'] = merged_data['PRICE']
                     merged_data['original_order'] = merged_data.index
 
-                    # Permitir NaNs en estas columnas convirtiéndolas a float temporalmente
-                    merged_data['PRICE'] = merged_data['PRICE'].astype(float)
+                    # Permitir NaNs y manejar strings como '-' convirtiéndolos numéricamente forzando errores a NaN
+                    merged_data['PRICE'] = pd.to_numeric(merged_data['PRICE'], errors='coerce')
                     for col in merged_data.columns:
                         if "STORE_STOCK" in col:
-                            merged_data[col] = merged_data[col].astype(float)
+                            merged_data[col] = pd.to_numeric(merged_data[col], errors='coerce')
                     
                     grouped = merged_data.groupby('ITEM_ID')
                     processed_groups = []
