@@ -78,8 +78,9 @@ def pagina_meli_cedi_oviedo():
                     # --- INICIO DE LA LÓGICA DE LIMPIEZA DE DATOS ---
                     data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
                     data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us05", "us06"]]
-                    data_ERP['us05'] = data_ERP['us05'].fillna(0)
-                    data_ERP['us06'] = data_ERP['us06'].fillna(0)
+                    data_ERP['Valuni'] = pd.to_numeric(data_ERP['Valuni'], errors='coerce').fillna(0)
+                    data_ERP['us05'] = pd.to_numeric(data_ERP['us05'], errors='coerce').fillna(0)
+                    data_ERP['us06'] = pd.to_numeric(data_ERP['us06'], errors='coerce').fillna(0)
                     data_ERP["Inventario_us05"] = data_ERP["us05"]
                     data_ERP["Inventario_us06"] = data_ERP["us06"]
                     data_ERP = data_ERP.drop(["us05", "us06"], axis=1)
@@ -251,9 +252,10 @@ def pagina_meli_av19_bulevar_oviedo():
 
                     # Cargar columnas necesarias: us01 (71348293), us02 (71348291), us05 (76644462)
                     data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02", "us05"]]
-                    data_ERP['us01'] = data_ERP['us01'].fillna(0)
-                    data_ERP['us02'] = data_ERP['us02'].fillna(0)
-                    data_ERP['us05'] = data_ERP['us05'].fillna(0)
+                    data_ERP['Valuni'] = pd.to_numeric(data_ERP['Valuni'], errors='coerce').fillna(0)
+                    data_ERP['us01'] = pd.to_numeric(data_ERP['us01'], errors='coerce').fillna(0)
+                    data_ERP['us02'] = pd.to_numeric(data_ERP['us02'], errors='coerce').fillna(0)
+                    data_ERP['us05'] = pd.to_numeric(data_ERP['us05'], errors='coerce').fillna(0)
 
                     data_ERP["Inventario_us01"] = data_ERP["us01"]
                     data_ERP["Inventario_us02"] = data_ERP["us02"]
@@ -430,10 +432,11 @@ def pagina_meli_av19_bulevar_cedi_oviedo():
 
                     # Cargar columnas necesarias: us01, us02, us05, us06
                     data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02", "us05", "us06"]]
-                    data_ERP['us01'] = data_ERP['us01'].fillna(0)
-                    data_ERP['us02'] = data_ERP['us02'].fillna(0)
-                    data_ERP['us05'] = data_ERP['us05'].fillna(0)
-                    data_ERP['us06'] = data_ERP['us06'].fillna(0)
+                    data_ERP['Valuni'] = pd.to_numeric(data_ERP['Valuni'], errors='coerce').fillna(0)
+                    data_ERP['us01'] = pd.to_numeric(data_ERP['us01'], errors='coerce').fillna(0)
+                    data_ERP['us02'] = pd.to_numeric(data_ERP['us02'], errors='coerce').fillna(0)
+                    data_ERP['us05'] = pd.to_numeric(data_ERP['us05'], errors='coerce').fillna(0)
+                    data_ERP['us06'] = pd.to_numeric(data_ERP['us06'], errors='coerce').fillna(0)
 
                     data_ERP["Inventario_us01"] = data_ERP["us01"]
                     data_ERP["Inventario_us02"] = data_ERP["us02"]
