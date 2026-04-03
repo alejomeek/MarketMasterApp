@@ -466,11 +466,12 @@ def pagina_meli_av19_bulevar_cedi_oviedo():
                     merged_data['Original_Price'] = merged_data['PRICE']
                     merged_data['original_order'] = merged_data.index
 
-                    # Permitir NaNs en estas columnas convirtiéndolas a float temporalmente
-                    merged_data['PRICE'] = pd.to_numeric(merged_data['PRICE'], errors='coerce')
+                    # Permitir NaNs en estas columnas convirtiéndolas a float64 explícitamente
+                    # Forzar float64 (no solo to_numeric) para evitar int64 cuando no hay '-'
+                    merged_data['PRICE'] = pd.to_numeric(merged_data['PRICE'], errors='coerce').astype(float)
                     for col in merged_data.columns:
                         if "STORE_STOCK" in col:
-                            merged_data[col] = pd.to_numeric(merged_data[col], errors='coerce')
+                            merged_data[col] = pd.to_numeric(merged_data[col], errors='coerce').astype(float)
 
                     grouped = merged_data.groupby('ITEM_ID')
                     processed_groups = []
