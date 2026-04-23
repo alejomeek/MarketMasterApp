@@ -12,9 +12,25 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- MAPA DE COLUMNAS ERP SEGÚN MODO ---
+COLUMNAS_NORMAL = {
+    'oviedo': 'us05',
+    'cedi':   'us06',
+}
+COLUMNAS_FERIA = {
+    'feria':  'us05',
+    'oviedo': 'us06',
+    'cedi':   'us07',
+}
+
+def banner_feria():
+    st.warning("🎪 **Modo Feria del Libro ACTIVO** — El ERP usa: `us05` = Feria · `us06` = Oviedo · `us07` = Cedi")
+
 # --- LÓGICA PARA MERCADO LIBRE (VERSIÓN ACTUALIZADA CON NUEVAS COLUMNAS) ---
-def pagina_meli_cedi_oviedo():
+def pagina_meli_cedi_oviedo(feria_mode=False):
     st.markdown("### 🛒 Mercado Libre - Cedi + Oviedo")
+    if feria_mode:
+        banner_feria()
 
     # Nuevas columnas actualizadas según el nuevo formato de Mercado Libre
     column_names = [
@@ -76,14 +92,17 @@ def pagina_meli_cedi_oviedo():
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
 
                     # --- INICIO DE LA LÓGICA DE LIMPIEZA DE DATOS ---
+                    mapa = COLUMNAS_FERIA if feria_mode else COLUMNAS_NORMAL
+                    col_oviedo = mapa['oviedo']
+                    col_cedi   = mapa['cedi']
                     data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
-                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us05", "us06"]]
-                    data_ERP['Valuni'] = pd.to_numeric(data_ERP['Valuni'], errors='coerce').fillna(0)
-                    data_ERP['us05'] = pd.to_numeric(data_ERP['us05'], errors='coerce').fillna(0)
-                    data_ERP['us06'] = pd.to_numeric(data_ERP['us06'], errors='coerce').fillna(0)
-                    data_ERP["Inventario_us05"] = data_ERP["us05"]
-                    data_ERP["Inventario_us06"] = data_ERP["us06"]
-                    data_ERP = data_ERP.drop(["us05", "us06"], axis=1)
+                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", col_oviedo, col_cedi]]
+                    data_ERP['Valuni']    = pd.to_numeric(data_ERP['Valuni'],    errors='coerce').fillna(0)
+                    data_ERP[col_oviedo]  = pd.to_numeric(data_ERP[col_oviedo],  errors='coerce').fillna(0)
+                    data_ERP[col_cedi]    = pd.to_numeric(data_ERP[col_cedi],    errors='coerce').fillna(0)
+                    data_ERP["Inventario_us05"] = data_ERP[col_oviedo]
+                    data_ERP["Inventario_us06"] = data_ERP[col_cedi]
+                    data_ERP = data_ERP.drop([col_oviedo, col_cedi], axis=1)
                     data_ERP.rename(columns={'Codpro': 'SKU'}, inplace=True)
 
                     # Conversión inicial a texto
@@ -185,8 +204,10 @@ def pagina_meli_cedi_oviedo():
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
-def pagina_meli_av19_bulevar_oviedo():
+def pagina_meli_av19_bulevar_oviedo(feria_mode=False):
     st.markdown("### 🛒 Mercado Libre - Av. 19 + Bulevar + Oviedo")
+    if feria_mode:
+        banner_feria()
 
     # Nuevas columnas actualizadas según el nuevo formato de Mercado Libre
     column_names = [
@@ -248,20 +269,22 @@ def pagina_meli_av19_bulevar_oviedo():
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
 
                     # --- INICIO DE LA LÓGICA DE LIMPIEZA DE DATOS ---
+                    mapa = COLUMNAS_FERIA if feria_mode else COLUMNAS_NORMAL
+                    col_oviedo = mapa['oviedo']
                     data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
 
-                    # Cargar columnas necesarias: us01 (71348293), us02 (71348291), us05 (76644462)
-                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02", "us05"]]
-                    data_ERP['Valuni'] = pd.to_numeric(data_ERP['Valuni'], errors='coerce').fillna(0)
-                    data_ERP['us01'] = pd.to_numeric(data_ERP['us01'], errors='coerce').fillna(0)
-                    data_ERP['us02'] = pd.to_numeric(data_ERP['us02'], errors='coerce').fillna(0)
-                    data_ERP['us05'] = pd.to_numeric(data_ERP['us05'], errors='coerce').fillna(0)
+                    # Cargar columnas necesarias: us01 (Av.19), us02 (Bulevar), col_oviedo (Oviedo)
+                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02", col_oviedo]]
+                    data_ERP['Valuni']   = pd.to_numeric(data_ERP['Valuni'],   errors='coerce').fillna(0)
+                    data_ERP['us01']     = pd.to_numeric(data_ERP['us01'],     errors='coerce').fillna(0)
+                    data_ERP['us02']     = pd.to_numeric(data_ERP['us02'],     errors='coerce').fillna(0)
+                    data_ERP[col_oviedo] = pd.to_numeric(data_ERP[col_oviedo], errors='coerce').fillna(0)
 
                     data_ERP["Inventario_us01"] = data_ERP["us01"]
                     data_ERP["Inventario_us02"] = data_ERP["us02"]
-                    data_ERP["Inventario_us05"] = data_ERP["us05"]
+                    data_ERP["Inventario_us05"] = data_ERP[col_oviedo]
 
-                    data_ERP = data_ERP.drop(["us01", "us02", "us05"], axis=1)
+                    data_ERP = data_ERP.drop(["us01", "us02", col_oviedo], axis=1)
                     data_ERP.rename(columns={'Codpro': 'SKU'}, inplace=True)
 
                     # Conversión inicial a texto
@@ -365,8 +388,10 @@ def pagina_meli_av19_bulevar_oviedo():
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
-def pagina_meli_av19_bulevar_cedi_oviedo():
+def pagina_meli_av19_bulevar_cedi_oviedo(feria_mode=False):
     st.markdown("### 🛒 Mercado Libre - Av. 19 + Bulevar + Cedi + Oviedo")
+    if feria_mode:
+        banner_feria()
 
     # Nuevas columnas actualizadas según el nuevo formato de Mercado Libre
     column_names = [
@@ -428,22 +453,25 @@ def pagina_meli_av19_bulevar_cedi_oviedo():
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
 
                     # --- INICIO DE LA LÓGICA DE LIMPIEZA DE DATOS ---
+                    mapa = COLUMNAS_FERIA if feria_mode else COLUMNAS_NORMAL
+                    col_oviedo = mapa['oviedo']
+                    col_cedi   = mapa['cedi']
                     data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
 
-                    # Cargar columnas necesarias: us01, us02, us05, us06
-                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02", "us05", "us06"]]
-                    data_ERP['Valuni'] = pd.to_numeric(data_ERP['Valuni'], errors='coerce').fillna(0)
-                    data_ERP['us01'] = pd.to_numeric(data_ERP['us01'], errors='coerce').fillna(0)
-                    data_ERP['us02'] = pd.to_numeric(data_ERP['us02'], errors='coerce').fillna(0)
-                    data_ERP['us05'] = pd.to_numeric(data_ERP['us05'], errors='coerce').fillna(0)
-                    data_ERP['us06'] = pd.to_numeric(data_ERP['us06'], errors='coerce').fillna(0)
+                    # Cargar columnas necesarias: us01 (Av.19), us02 (Bulevar), col_oviedo, col_cedi
+                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02", col_oviedo, col_cedi]]
+                    data_ERP['Valuni']   = pd.to_numeric(data_ERP['Valuni'],   errors='coerce').fillna(0)
+                    data_ERP['us01']     = pd.to_numeric(data_ERP['us01'],     errors='coerce').fillna(0)
+                    data_ERP['us02']     = pd.to_numeric(data_ERP['us02'],     errors='coerce').fillna(0)
+                    data_ERP[col_oviedo] = pd.to_numeric(data_ERP[col_oviedo], errors='coerce').fillna(0)
+                    data_ERP[col_cedi]   = pd.to_numeric(data_ERP[col_cedi],   errors='coerce').fillna(0)
 
                     data_ERP["Inventario_us01"] = data_ERP["us01"]
                     data_ERP["Inventario_us02"] = data_ERP["us02"]
-                    data_ERP["Inventario_us05"] = data_ERP["us05"]
-                    data_ERP["Inventario_us06"] = data_ERP["us06"]
+                    data_ERP["Inventario_us05"] = data_ERP[col_oviedo]
+                    data_ERP["Inventario_us06"] = data_ERP[col_cedi]
 
-                    data_ERP = data_ERP.drop(["us01", "us02", "us05", "us06"], axis=1)
+                    data_ERP = data_ERP.drop(["us01", "us02", col_oviedo, col_cedi], axis=1)
                     data_ERP.rename(columns={'Codpro': 'SKU'}, inplace=True)
 
                     # Conversión inicial a texto
@@ -549,8 +577,10 @@ def pagina_meli_av19_bulevar_cedi_oviedo():
                     st.error(f"❌ Error al procesar: {e}")
 
 # --- LÓGICA PARA FALABELLA ---
-def pagina_falabella():
+def pagina_falabella(feria_mode=False):
     st.markdown("### 🧩 Falabella")
+    if feria_mode:
+        banner_feria()
     
     column_names_price = ['SellerSku', 'ShopSku', 'PriceFalabella', 'SalePriceFalabella', 'SaleStartDateFalabella', 'SaleEndDateFalabella', 'Name']
     column_names_inventory = ['SellerSku', 'ShopSku', 'QuantityFalabella', 'Name']
@@ -716,8 +746,10 @@ def pagina_rappi_ciudad(ciudad_nombre, titulo_seccion, tiendas, erp_cols, key_su
                 procesar_rappi(uploaded_file_rappi, uploaded_file_erp, tiendas, erp_cols, ciudad_nombre)
 
 # --- LÓGICA PARA WIX ---
-def pagina_wix():
+def pagina_wix(feria_mode=False):
     st.markdown("## 🌐 Wix")
+    if feria_mode:
+        banner_feria()
     column_names = [
         'handleId', 'fieldType', 'name', 'description', 'productImageUrl', 'collection', 'sku', 'ribbon', 
         'price', 'surcharge', 'visible', 'discountMode', 'discountValue', 'inventory', 'weight', 'cost',
@@ -745,8 +777,8 @@ def pagina_wix():
                     
                     data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
                     data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02"]]
-                    data_ERP['us01'] = data_ERP['us01'].fillna(0)
-                    data_ERP['us02'] = data_ERP['us02'].fillna(0)
+                    data_ERP['us01'] = pd.to_numeric(data_ERP['us01'], errors='coerce').fillna(0)
+                    data_ERP['us02'] = pd.to_numeric(data_ERP['us02'], errors='coerce').fillna(0)
                     data_ERP["Inventario_Wix"] = data_ERP["us01"] + data_ERP["us02"]
                     data_ERP.drop(["us01", "us02"], axis=1, inplace=True)
                     data_ERP.rename(columns={'Codpro': 'sku'}, inplace=True)
@@ -784,8 +816,10 @@ def pagina_wix():
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
-def pagina_wix_av19_bulevar_cedi():
+def pagina_wix_av19_bulevar_cedi(feria_mode=False):
     st.markdown("## 🌐 Wix - Av. 19 + Bulevar + Cedi")
+    if feria_mode:
+        banner_feria()
     column_names = [
         'handleId', 'fieldType', 'name', 'description', 'productImageUrl', 'collection', 'sku', 'ribbon', 
         'price', 'surcharge', 'visible', 'discountMode', 'discountValue', 'inventory', 'weight', 'cost',
@@ -810,14 +844,16 @@ def pagina_wix_av19_bulevar_cedi():
 
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1')
 
+                    mapa = COLUMNAS_FERIA if feria_mode else COLUMNAS_NORMAL
+                    col_cedi = mapa['cedi']
                     data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
-                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02", "us06"]]
-                    data_ERP['us01'] = data_ERP['us01'].fillna(0)
-                    data_ERP['us02'] = data_ERP['us02'].fillna(0)
-                    data_ERP['us06'] = data_ERP['us06'].fillna(0)
-                    # Av. 19 (us01) + Bulevar (us02) + Cedi (us06)
-                    data_ERP["Inventario_Wix"] = data_ERP["us01"] + data_ERP["us02"] + data_ERP["us06"]
-                    data_ERP.drop(["us01", "us02", "us06"], axis=1, inplace=True)
+                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02", col_cedi]]
+                    data_ERP['us01']   = pd.to_numeric(data_ERP['us01'],   errors='coerce').fillna(0)
+                    data_ERP['us02']   = pd.to_numeric(data_ERP['us02'],   errors='coerce').fillna(0)
+                    data_ERP[col_cedi] = pd.to_numeric(data_ERP[col_cedi], errors='coerce').fillna(0)
+                    # Av. 19 (us01) + Bulevar (us02) + Cedi (col_cedi)
+                    data_ERP["Inventario_Wix"] = data_ERP["us01"] + data_ERP["us02"] + data_ERP[col_cedi]
+                    data_ERP.drop(["us01", "us02", col_cedi], axis=1, inplace=True)
                     data_ERP.rename(columns={'Codpro': 'sku'}, inplace=True)
                     data_ERP['sku'] = data_ERP['sku'].astype(str)
 
@@ -879,18 +915,29 @@ def main():
     ]
     opcion = st.sidebar.selectbox("Plataforma:", opciones)
 
+    # --- TOGGLE FERIA DEL LIBRO ---
+    st.sidebar.markdown("---")
+    feria_mode = st.sidebar.toggle(
+        "🎪 Modo Feria del Libro",
+        value=False,
+        help="Activa cuando el ERP incluye la columna us05=Feria. El mapa cambia: us05=Feria · us06=Oviedo · us07=Cedi"
+    )
+    if feria_mode:
+        st.sidebar.warning("⚠️ Feria del Libro activa")
+    st.sidebar.markdown("---")
+
     # Título principal de la aplicación
     st.title("🚀 MarketMaster")
 
     # Lógica para mostrar la página correcta según la selección
     if opcion == "Mercado Libre - Cedi + Oviedo":
-        pagina_meli_cedi_oviedo()
+        pagina_meli_cedi_oviedo(feria_mode)
     elif opcion == "Mercado Libre - Av. 19 + Bulevar + Oviedo":
-        pagina_meli_av19_bulevar_oviedo()
+        pagina_meli_av19_bulevar_oviedo(feria_mode)
     elif opcion == "Mercado Libre - Av. 19 + Bulevar + Cedi + Oviedo":
-        pagina_meli_av19_bulevar_cedi_oviedo()
+        pagina_meli_av19_bulevar_cedi_oviedo(feria_mode)
     elif opcion == "Falabella":
-        pagina_falabella()
+        pagina_falabella(feria_mode)
     elif opcion == "Rappi - Bogotá":
         pagina_rappi_ciudad(
             ciudad_nombre="Bogotá",
@@ -908,17 +955,26 @@ def main():
             key_suffix="bqa"
         )
     elif opcion == "Rappi - Medellín":
-        pagina_rappi_ciudad(
-            ciudad_nombre="Medellín",
-            titulo_seccion="Medellín (Oviedo)",
-            tiendas={900418701: 'us05'},
-            erp_cols=["Codpro", "Nompro", "Valuni", "us05"],
-            key_suffix="med"
-        )
+        if feria_mode:
+            pagina_rappi_ciudad(
+                ciudad_nombre="Medellín",
+                titulo_seccion="Medellín (Oviedo) 🎪",
+                tiendas={900418701: 'us06'},
+                erp_cols=["Codpro", "Nompro", "Valuni", "us06"],
+                key_suffix="med"
+            )
+        else:
+            pagina_rappi_ciudad(
+                ciudad_nombre="Medellín",
+                titulo_seccion="Medellín (Oviedo)",
+                tiendas={900418701: 'us05'},
+                erp_cols=["Codpro", "Nompro", "Valuni", "us05"],
+                key_suffix="med"
+            )
     elif opcion == "Wix - Av. 19 + Bulevar":
-        pagina_wix()
+        pagina_wix(feria_mode)
     elif opcion == "Wix - Av. 19 + Bulevar + Cedi":
-        pagina_wix_av19_bulevar_cedi()
+        pagina_wix_av19_bulevar_cedi(feria_mode)
 
     st.sidebar.info("Esta app centraliza la actualización de inventarios y precios en múltiples plataformas.")
 
