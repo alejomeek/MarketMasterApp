@@ -970,17 +970,16 @@ def pagina_addi(feria_mode=False):
     # ── Sección 2: Inventario ──────────────────────────────────────────
     st.markdown("---")
     st.markdown("#### 📦 Actualizar Inventario (estoque)")
-    st.info("💡 El archivo de inventario debe estar en formato **.xlsx**. Si tienes el archivo en **.xls**, ábrelo en Excel y guárdalo como *Libro de Excel (.xlsx)* antes de subirlo.")
 
-    uploaded_inv_addi = st.file_uploader("📤 Cargar archivo de inventario Addi (.xlsx)", type=['xlsx'], key="addi_inv_excel")
+    uploaded_inv_addi = st.file_uploader("📤 Cargar archivo de inventario Addi (.xls o .xlsx)", type=['xls', 'xlsx'], key="addi_inv_excel")
     uploaded_inv_erp  = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="addi_inv_erp")
 
     if uploaded_inv_addi and uploaded_inv_erp:
         if st.button('🔄 Procesar Inventario Addi', key="addi_inv_process"):
             with st.spinner('Procesando inventario...'):
                 try:
-                    # --- Cargar inventario Addi (soporta .xls y .xlsx) ---
-                    data_inv = pd.read_excel(uploaded_inv_addi, header=0, dtype={'RefId': str})
+                    # --- Cargar inventario Addi (soporta .xls y .xlsx via calamine) ---
+                    data_inv = pd.read_excel(uploaded_inv_addi, header=0, engine='calamine', dtype={'RefId': str})
 
                     # --- Cargar y limpiar ERP ---
                     data_ERP = pd.read_csv(uploaded_inv_erp, delimiter=';', encoding='latin1', low_memory=False)
