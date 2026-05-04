@@ -967,6 +967,80 @@ def pagina_addi(feria_mode=False):
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
+    # ── Sección 2: Inventario ──────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("#### 📦 Actualizar Inventario (estoque)")
+
+    uploaded_inv_addi = st.file_uploader("📤 Cargar archivo de inventario Addi (.xls)", type=['xls', 'xlsx'], key="addi_inv_excel")
+    uploaded_inv_erp  = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="addi_inv_erp")
+
+    if uploaded_inv_addi and uploaded_inv_erp:
+        if st.button('🔄 Procesar Inventario Addi', key="addi_inv_process"):
+            with st.spinner('Procesando inventario...'):
+                try:
+                    # --- Cargar inventario Addi (soporta .xls y .xlsx) ---
+                    data_inv = pd.read_excel(uploaded_inv_addi, header=0, dtype={'RefId': str})
+
+                    # --- Cargar y limpiar ERP ---
+                    data_ERP = pd.read_csv(uploaded_inv_erp, delimiter=';', encoding='latin1', low_memory=False)
+                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
+                    data_ERP = data_ERP[["Codpro", "us01", "us02"]]
+                    data_ERP['us01'] = pd.to_numeric(data_ERP['us01'], errors='coerce').fillna(0)
+                    data_ERP['us02'] = pd.to_numeric(data_ERP['us02'], errors='coerce').fillna(0)
+                    # Misma lógica que Wix: Av. 19 (us01) + Bulevar (us02)
+                    data_ERP['Inventario_Addi'] = data_ERP['us01'] + data_ERP['us02']
+                    data_ERP = data_ERP[['Codpro', 'Inventario_Addi']]
+                    data_ERP['Codpro'] = data_ERP['Codpro'].astype(str).str.strip()
+
+                    # --- Limpiar llave de Addi ---
+                    data_inv['RefId'] = data_inv['RefId'].astype(str).str.strip()
+
+                    # --- Cruce por RefId ↔ Codpro ---
+                    merged_inv = pd.merge(
+                        data_inv,
+                        data_ERP,
+                        left_on='RefId',
+                        right_on='Codpro',
+                        how='left'
+                    )
+
+                    # --- Actualizar TotalQuantity: solo donde cruzó ---
+                    # Si no cruzó, conservar el valor original
+                    merged_inv['TotalQuantity'] = merged_inv['Inventario_Addi'].combine_first(
+                        merged_inv['TotalQuantity']
+                    ).round(0).astype('Int64')
+
+                    # --- Construir el Excel de salida como .xlsx ---
+                    # Copiar todas las columnas originales (sin la col auxiliar Codpro/Inventario_Addi)
+                    cols_orig = [c for c in data_inv.columns]
+                    output_df = merged_inv[cols_orig].copy()
+
+                    output = BytesIO()
+                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                        output_df.to_excel(writer, index=False)
+                    output.seek(0)
+
+                    # --- Resumen ---
+                    actualizados = merged_inv['Codpro'].notna().sum()
+                    sin_cruzar   = merged_inv['Codpro'].isna().sum()
+
+                    st.success(f"✅ ¡Inventario procesado! — {actualizados} productos actualizados, {sin_cruzar} sin cruzar.")
+                    if sin_cruzar > 0:
+                        st.warning("⚠️ Los siguientes productos no encontraron inventario en el ERP y conservaron su valor original:")
+                        st.dataframe(merged_inv[merged_inv['Codpro'].isna()][['RefId', 'TotalQuantity']])
+
+                    st.dataframe(merged_inv[['RefId', 'TotalQuantity', 'Inventario_Addi']].head(10))
+
+                    st.download_button(
+                        label="⬇️ Descargar Inventario Addi modificado (.xlsx)",
+                        data=output,
+                        file_name="Addi_Inventario_ACTUALIZADO.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+
+                except Exception as e:
+                    st.error(f"❌ Error al procesar inventario: {e}")
+
 # --- APLICACIÓN PRINCIPAL (NAVEGACIÓN) ---
 def main():
     # Mostrar logo en la barra lateral
