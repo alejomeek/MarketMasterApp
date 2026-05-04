@@ -1010,14 +1010,29 @@ def pagina_addi(feria_mode=False):
                         merged_inv['TotalQuantity']
                     ).round(0).astype('Int64')
 
-                    # --- Construir el Excel de salida como .xlsx ---
+                    # --- Construir el Excel de salida como .xls (Excel 97-2003) ---
                     # Copiar todas las columnas originales (sin la col auxiliar Codpro/Inventario_Addi)
                     cols_orig = [c for c in data_inv.columns]
                     output_df = merged_inv[cols_orig].copy()
 
+                    import xlwt
                     output = BytesIO()
-                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                        output_df.to_excel(writer, index=False)
+                    wb_xls = xlwt.Workbook()
+                    ws_xls = wb_xls.add_sheet('Sheet1')
+
+                    # Encabezados
+                    for col_idx, col_name in enumerate(output_df.columns):
+                        ws_xls.write(0, col_idx, str(col_name))
+
+                    # Datos
+                    for row_idx, row in output_df.iterrows():
+                        for col_idx, value in enumerate(row):
+                            if pd.isna(value):
+                                ws_xls.write(row_idx + 1, col_idx, '')
+                            else:
+                                ws_xls.write(row_idx + 1, col_idx, value)
+
+                    wb_xls.save(output)
                     output.seek(0)
 
                     # --- Resumen ---
@@ -1032,10 +1047,10 @@ def pagina_addi(feria_mode=False):
                     st.dataframe(merged_inv[['RefId', 'TotalQuantity', 'Inventario_Addi']].head(10))
 
                     st.download_button(
-                        label="⬇️ Descargar Inventario Addi modificado (.xlsx)",
+                        label="⬇️ Descargar Inventario Addi modificado (.xls)",
                         data=output,
-                        file_name="Addi_Inventario_ACTUALIZADO.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        file_name="Addi_Inventario_ACTUALIZADO.xls",
+                        mime="application/vnd.ms-excel"
                     )
 
                 except Exception as e:
