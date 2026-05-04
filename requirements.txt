@@ -4,3 +4,4 @@ openpyxl
 Pillow
 numpy
 requests
+xlrd>=2.0.1

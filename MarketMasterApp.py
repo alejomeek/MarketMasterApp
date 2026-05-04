@@ -970,8 +970,9 @@ def pagina_addi(feria_mode=False):
     # ── Sección 2: Inventario ──────────────────────────────────────────
     st.markdown("---")
     st.markdown("#### 📦 Actualizar Inventario (estoque)")
+    st.info("💡 El archivo de inventario debe estar en formato **.xlsx**. Si tienes el archivo en **.xls**, ábrelo en Excel y guárdalo como *Libro de Excel (.xlsx)* antes de subirlo.")
 
-    uploaded_inv_addi = st.file_uploader("📤 Cargar archivo de inventario Addi (.xls)", type=['xls', 'xlsx'], key="addi_inv_excel")
+    uploaded_inv_addi = st.file_uploader("📤 Cargar archivo de inventario Addi (.xlsx)", type=['xlsx'], key="addi_inv_excel")
     uploaded_inv_erp  = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="addi_inv_erp")
 
     if uploaded_inv_addi and uploaded_inv_erp:
