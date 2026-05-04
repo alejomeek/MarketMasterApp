@@ -889,6 +889,84 @@ def pagina_wix_av19_bulevar_cedi(feria_mode=False):
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
+# --- LÓGICA PARA ADDI ---
+def pagina_addi(feria_mode=False):
+    st.markdown("### 🟣 Addi")
+    if feria_mode:
+        banner_feria()
+
+    uploaded_file_addi = st.file_uploader("📤 Cargar archivo Excel de Addi (Base Prices)", type=['xlsx'], key="addi_excel")
+    uploaded_file_erp  = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="addi_erp")
+
+    if uploaded_file_addi and uploaded_file_erp:
+        if st.button('🔄 Procesar Addi', key="addi_process"):
+            with st.spinner('Procesando archivos...'):
+                try:
+                    # --- Cargar el archivo de Addi ---
+                    data_addi = pd.read_excel(uploaded_file_addi, header=0)
+
+                    # --- Cargar y limpiar el ERP ---
+                    data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1', low_memory=False)
+                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
+                    data_ERP = data_ERP[["Codpro", "Valuni"]]
+                    data_ERP['Valuni']  = pd.to_numeric(data_ERP['Valuni'], errors='coerce')
+                    data_ERP['Codpro']  = data_ERP['Codpro'].astype(str).str.strip()
+
+                    # --- Limpiar la llave de Addi ---
+                    data_addi['Ref ID (View Only)'] = data_addi['Ref ID (View Only)'].astype(str).str.strip()
+
+                    # --- Cruce por Ref ID ↔ Codpro ---
+                    merged = pd.merge(
+                        data_addi,
+                        data_ERP,
+                        left_on='Ref ID (View Only)',
+                        right_on='Codpro',
+                        how='left'
+                    )
+
+                    # --- Actualizar precios: solo donde cruzó (Valuni no es NaN) ---
+                    # Si no cruzó, conservar el precio original
+                    merged['Cost Price'] = merged['Valuni'].combine_first(merged['Cost Price'])
+                    merged['Base Price'] = merged['Valuni'].combine_first(merged['Base Price'])
+
+                    # Convertir a entero (Addi no usa decimales en precios)
+                    merged['Cost Price'] = merged['Cost Price'].round(0).astype('Int64')
+                    merged['Base Price'] = merged['Base Price'].round(0).astype('Int64')
+
+                    # --- Escribir solo cols B y C en el Excel original (preserva formato) ---
+                    wb = load_workbook(uploaded_file_addi)
+                    ws = wb.active
+
+                    for idx, row in merged.iterrows():
+                        excel_row = idx + 2  # fila 1 = encabezado, datos desde fila 2
+                        ws.cell(row=excel_row, column=2, value=int(row['Cost Price']) if pd.notna(row['Cost Price']) else None)
+                        ws.cell(row=excel_row, column=3, value=int(row['Base Price']) if pd.notna(row['Base Price']) else None)
+
+                    output = BytesIO()
+                    wb.save(output)
+                    output.seek(0)
+
+                    # --- Resumen ---
+                    actualizados = merged['Codpro'].notna().sum()
+                    sin_cruzar   = merged['Codpro'].isna().sum()
+
+                    st.success(f"✅ ¡Archivo de Addi procesado! — {actualizados} precios actualizados, {sin_cruzar} sin cruzar.")
+                    if sin_cruzar > 0:
+                        st.warning("⚠️ Los siguientes productos no encontraron precio en el ERP y conservaron su precio original:")
+                        st.dataframe(merged[merged['Codpro'].isna()][['Ref ID (View Only)', 'SKU Name (View Only)', 'Cost Price', 'Base Price']])
+
+                    st.dataframe(merged[['Ref ID (View Only)', 'SKU Name (View Only)', 'Cost Price', 'Base Price', 'Valuni']].head(10))
+
+                    st.download_button(
+                        label="⬇️ Descargar Addi modificado",
+                        data=output,
+                        file_name="Addi_Base_Prices_ACTUALIZADO.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+
+                except Exception as e:
+                    st.error(f"❌ Error al procesar: {e}")
+
 # --- APLICACIÓN PRINCIPAL (NAVEGACIÓN) ---
 def main():
     # Mostrar logo en la barra lateral
@@ -911,7 +989,8 @@ def main():
         "Rappi - Barranquilla",
         "Rappi - Medellín",
         "Wix - Av. 19 + Bulevar",
-        "Wix - Av. 19 + Bulevar + Cedi"
+        "Wix - Av. 19 + Bulevar + Cedi",
+        "Addi"
     ]
     opcion = st.sidebar.selectbox("Plataforma:", opciones)
 
@@ -975,6 +1054,8 @@ def main():
         pagina_wix(feria_mode)
     elif opcion == "Wix - Av. 19 + Bulevar + Cedi":
         pagina_wix_av19_bulevar_cedi(feria_mode)
+    elif opcion == "Addi":
+        pagina_addi(feria_mode)
 
     st.sidebar.info("Esta app centraliza la actualización de inventarios y precios en múltiples plataformas.")
 
