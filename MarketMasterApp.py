@@ -129,7 +129,7 @@ def pagina_meli_cedi_oviedo(feria_mode=False):
                     merged_data['PRICE'] = pd.to_numeric(merged_data['PRICE'], errors='coerce')
                     for col in merged_data.columns:
                         if "STORE_STOCK" in col:
-                            merged_data[col] = pd.to_numeric(merged_data[col], errors='coerce')
+                            merged_data[col] = pd.to_numeric(merged_data[col], errors='coerce').astype(float)
 
                     grouped = merged_data.groupby('ITEM_ID')
                     processed_groups = []
@@ -311,8 +311,8 @@ def pagina_meli_av19_bulevar_oviedo(feria_mode=False):
                     merged_data['PRICE'] = pd.to_numeric(merged_data['PRICE'], errors='coerce')
                     for col in merged_data.columns:
                         if "STORE_STOCK" in col:
-                            merged_data[col] = pd.to_numeric(merged_data[col], errors='coerce')
-                    
+                            merged_data[col] = pd.to_numeric(merged_data[col], errors='coerce').astype(float)
+
                     grouped = merged_data.groupby('ITEM_ID')
                     processed_groups = []
                     for name, group in grouped:
