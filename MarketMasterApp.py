@@ -889,6 +889,106 @@ def pagina_wix_av19_bulevar_cedi(feria_mode=False):
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
+# --- LÓGICA PARA SHOPIFY ---
+def pagina_shopify(feria_mode=False):
+    st.markdown("### 🛍️ Shopify - Inventario")
+    if feria_mode:
+        banner_feria()
+
+    uploaded_file_shopify = st.file_uploader("📤 Cargar archivo CSV de Shopify (Inventory Export)", type=['csv'], key="shopify_inv_csv")
+    uploaded_file_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="shopify_inv_erp")
+
+    if uploaded_file_shopify and uploaded_file_erp:
+        if st.button('🔄 Procesar Shopify', key="shopify_inv_process"):
+            with st.spinner('Procesando archivos...'):
+                try:
+                    data_shopify = pd.read_csv(uploaded_file_shopify, dtype={'SKU': str})
+
+                    data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1', low_memory=False)
+                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
+                    data_ERP = data_ERP[["Codpro", "us01", "us02"]]
+                    data_ERP['us01'] = pd.to_numeric(data_ERP['us01'], errors='coerce').fillna(0)
+                    data_ERP['us02'] = pd.to_numeric(data_ERP['us02'], errors='coerce').fillna(0)
+                    data_ERP["Inventario_Shopify"] = data_ERP["us01"] + data_ERP["us02"]
+                    data_ERP.drop(["us01", "us02"], axis=1, inplace=True)
+                    data_ERP.rename(columns={'Codpro': 'SKU'}, inplace=True)
+                    data_ERP['SKU'] = data_ERP['SKU'].astype(str).str.strip()
+
+                    data_shopify['SKU'] = data_shopify['SKU'].astype(str).str.strip()
+                    data_shopify['SKU'] = data_shopify['SKU'].str.replace(r'\.0$', '', regex=True)
+                    data_shopify['SKU'] = data_shopify['SKU'].replace('nan', np.nan)
+
+                    merged = pd.merge(data_shopify, data_ERP, on='SKU', how='left')
+                    merged['On hand (new)'] = merged['Inventario_Shopify'].fillna(0).astype(int)
+                    merged = merged.drop(['Inventario_Shopify'], axis=1)
+
+                    output = merged.to_csv(index=False, encoding='utf-8')
+
+                    st.success("✅ ¡Archivo de Shopify procesado!")
+                    st.dataframe(merged[['Handle', 'SKU', 'On hand (current)', 'On hand (new)']].head())
+                    st.download_button(
+                        label="⬇️ Descargar Shopify modificado",
+                        data=output,
+                        file_name="Shopify_Inventario_ACTUALIZADO.csv",
+                        mime="text/csv"
+                    )
+                except Exception as e:
+                    st.error(f"❌ Error al procesar: {e}")
+
+    # ── Sección 2: Precios ─────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("#### 💰 Actualizar Precios")
+
+    uploaded_products_shopify = st.file_uploader("📤 Cargar archivo CSV de Shopify (Products Export)", type=['csv'], key="shopify_price_csv")
+    uploaded_products_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="shopify_price_erp")
+
+    if uploaded_products_shopify and uploaded_products_erp:
+        if st.button('🔄 Procesar Precios Shopify', key="shopify_price_process"):
+            with st.spinner('Procesando archivos...'):
+                try:
+                    # Leer todo como texto para preservar el formato exacto del archivo
+                    data_shopify = pd.read_csv(uploaded_products_shopify, dtype=str, keep_default_na=False)
+
+                    data_ERP = pd.read_csv(uploaded_products_erp, delimiter=';', encoding='latin1', low_memory=False)
+                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
+                    data_ERP = data_ERP[["Codpro", "Valuni"]]
+                    data_ERP['Valuni'] = pd.to_numeric(data_ERP['Valuni'], errors='coerce')
+                    data_ERP['Codpro'] = data_ERP['Codpro'].astype(str).str.strip()
+
+                    # El SKU en el export de Shopify puede tener prefijo ' (truco Excel)
+                    # Lo limpiamos solo para el cruce, sin modificar la columna original
+                    sku_clean = data_shopify['Variant SKU'].str.lstrip("'").str.strip()
+
+                    # Cruce por SKU limpio
+                    temp = sku_clean.to_frame(name='SKU_clean').merge(
+                        data_ERP, left_on='SKU_clean', right_on='Codpro', how='left'
+                    )
+
+                    # Actualizar Variant Price solo donde hay match (no tocar filas de imágenes sin SKU)
+                    mask = temp['Valuni'].notna()
+                    data_shopify.loc[mask, 'Variant Price'] = temp.loc[mask, 'Valuni'].apply(lambda x: f"{x:.2f}")
+
+                    actualizados = mask.sum()
+                    sin_cruzar = (sku_clean.str.len() > 0) & (~mask)
+
+                    output = data_shopify.to_csv(index=False, encoding='utf-8')
+
+                    st.success(f"✅ ¡Archivo de Shopify procesado! — {actualizados} precios actualizados.")
+                    if sin_cruzar.any():
+                        st.warning("⚠️ Los siguientes SKUs no encontraron precio en el ERP y conservaron su valor original:")
+                        st.dataframe(data_shopify[sin_cruzar][['Handle', 'Variant SKU', 'Variant Price']])
+
+                    st.dataframe(data_shopify[mask][['Handle', 'Variant SKU', 'Variant Price']].head(10))
+
+                    st.download_button(
+                        label="⬇️ Descargar Shopify Precios modificado",
+                        data=output,
+                        file_name="Shopify_Precios_ACTUALIZADO.csv",
+                        mime="text/csv"
+                    )
+                except Exception as e:
+                    st.error(f"❌ Error al procesar precios: {e}")
+
 # --- LÓGICA PARA ADDI ---
 def pagina_addi(feria_mode=False):
     st.markdown("### 🟣 Addi")
@@ -1079,6 +1179,7 @@ def main():
         "Rappi - Medellín",
         "Wix - Av. 19 + Bulevar",
         "Wix - Av. 19 + Bulevar + Cedi",
+        "Shopify",
         "Addi"
     ]
     opcion = st.sidebar.selectbox("Plataforma:", opciones)
@@ -1143,6 +1244,8 @@ def main():
         pagina_wix(feria_mode)
     elif opcion == "Wix - Av. 19 + Bulevar + Cedi":
         pagina_wix_av19_bulevar_cedi(feria_mode)
+    elif opcion == "Shopify":
+        pagina_shopify(feria_mode)
     elif opcion == "Addi":
         pagina_addi(feria_mode)
 
