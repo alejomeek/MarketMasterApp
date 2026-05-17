@@ -971,7 +971,10 @@ def pagina_shopify(feria_mode=False):
                     actualizados = mask.sum()
                     sin_cruzar = (sku_clean.str.len() > 0) & (~mask)
 
-                    output = data_shopify.to_csv(index=False, encoding='utf-8')
+                    # Solo exportar columnas mínimas que Shopify necesita para actualizar precios
+                    cols_export = ['Handle', 'Title', 'Variant SKU', 'Variant Price']
+                    data_export = data_shopify[cols_export]
+                    output = data_export.to_csv(index=False, encoding='utf-8')
 
                     st.success(f"✅ ¡Archivo de Shopify procesado! — {actualizados} precios actualizados.")
                     if sin_cruzar.any():
