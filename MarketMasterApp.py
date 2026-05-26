@@ -27,7 +27,7 @@ def banner_feria():
     st.warning("🎪 **Modo Feria del Libro ACTIVO** — El ERP usa: `us05` = Feria · `us06` = Oviedo · `us07` = Cedi")
 
 # --- LÓGICA PARA MERCADO LIBRE (VERSIÓN ACTUALIZADA CON NUEVAS COLUMNAS) ---
-def pagina_meli_cedi_oviedo(feria_mode=False):
+def pagina_meli_cedi_oviedo(feria_mode=False, calle74=False):
     st.markdown("### 🛒 Mercado Libre - Cedi + Oviedo")
     if feria_mode:
         banner_feria()
@@ -35,7 +35,8 @@ def pagina_meli_cedi_oviedo(feria_mode=False):
     # Nuevas columnas actualizadas según el nuevo formato de Mercado Libre
     column_names = [
         'FAMILY_ID', 'ITEM_ID', 'PRODUCT_NUMBER', 'VARIATION_ID', 'SKU', 'TITLE', 'VARIATIONS',
-        'STORE_STOCK_QUANTITY_71348291#COP1326882072', 'STORE_STOCK_QUANTITY_71843625#COP1326882074',
+        'STORE_STOCK_QUANTITY_71348291#COP1326882072', 'STORE_STOCK_QUANTITY_77329299#COP1326882076',
+        'STORE_STOCK_QUANTITY_71843625#COP1326882074',
         'STORE_STOCK_QUANTITY_76644462#COP1326882075', 'STORE_STOCK_QUANTITY_71348293#COP1326882073',
         'TOTAL_STOCK_ALL_STORES', 'STOCK_FULL', 'PRICE', 'CURRENCY_ID'
     ]
@@ -50,16 +51,16 @@ def pagina_meli_cedi_oviedo(feria_mode=False):
                     # Primero leer SIN forzar nombres para validar
                     data_MELI_raw = pd.read_excel(uploaded_file_meli, header=0, skiprows=range(1, 5), sheet_name="Publicaciones")
 
-                    # Validación: verificar que tenga exactamente 15 columnas
-                    if data_MELI_raw.shape[1] != 15:
+                    # Validación: verificar que tenga exactamente 16 columnas
+                    if data_MELI_raw.shape[1] != 16:
                         st.error(f"""
     ❌ **Error: La plantilla de Mercado Libre no tiene el esquema esperado.**
 
     **Problema detectado:**
     - El archivo tiene **{data_MELI_raw.shape[1]} columnas**
-    - Se esperaban **15 columnas**
+    - Se esperaban **16 columnas**
 
-    **Se esperaban estas 15 columnas en este orden:**
+    **Se esperaban estas 16 columnas en este orden:**
     1. FAMILY_ID
     2. ITEM_ID
     3. PRODUCT_NUMBER
@@ -68,20 +69,22 @@ def pagina_meli_cedi_oviedo(feria_mode=False):
     6. TITLE
     7. VARIATIONS
     8. STORE_STOCK_QUANTITY_71348291#COP1326882072
-    9. STORE_STOCK_QUANTITY_71843625#COP1326882074
-    10. STORE_STOCK_QUANTITY_76644462#COP1326882075
-    11. STORE_STOCK_QUANTITY_71348293#COP1326882073
-    12. TOTAL_STOCK_ALL_STORES
-    13. STOCK_FULL
-    14. PRICE
-    15. CURRENCY_ID
+    9. STORE_STOCK_QUANTITY_77329299#COP1326882076
+    10. STORE_STOCK_QUANTITY_71843625#COP1326882074
+    11. STORE_STOCK_QUANTITY_76644462#COP1326882075
+    12. STORE_STOCK_QUANTITY_71348293#COP1326882073
+    13. TOTAL_STOCK_ALL_STORES
+    14. STOCK_FULL
+    15. PRICE
+    16. CURRENCY_ID
 
     **Por favor:**
     - Descarga la plantilla más reciente desde tu panel de Mercado Libre
     - O escribe a Alejandro o envía mensaje en el grupo de WhatsApp de MarketMaster
 
-    **Nota técnica:** Si estás usando una plantilla antigua, tiene columnas obsoletas como
-    CHANNEL, MARKETPLACE_PRICE, MSHOPS_PRICE, WARRANTY_TYPE, etc. que ya no se usan.
+    **Nota técnica:** El nuevo formato incluye la columna
+    STORE_STOCK_QUANTITY_77329299#COP1326882076 (Barranquilla Calle 74).
+    Si tu plantilla tiene solo 15 columnas, descárgala nuevamente desde Mercado Libre.
     """)
                         return  # Detener ejecución
 
@@ -96,10 +99,19 @@ def pagina_meli_cedi_oviedo(feria_mode=False):
                     col_oviedo = mapa['oviedo']
                     col_cedi   = mapa['cedi']
                     data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
-                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", col_oviedo, col_cedi]]
+                    erp_cols = ["Codpro", "Nompro", "Valuni", col_oviedo, col_cedi]
+                    if calle74:
+                        erp_cols.append("us03")
+                    data_ERP = data_ERP[erp_cols]
                     data_ERP['Valuni']    = pd.to_numeric(data_ERP['Valuni'],    errors='coerce').fillna(0)
                     data_ERP[col_oviedo]  = pd.to_numeric(data_ERP[col_oviedo],  errors='coerce').fillna(0)
                     data_ERP[col_cedi]    = pd.to_numeric(data_ERP[col_cedi],    errors='coerce').fillna(0)
+                    if calle74:
+                        data_ERP['us03'] = pd.to_numeric(data_ERP['us03'], errors='coerce').fillna(0)
+                        data_ERP['Inventario_us03'] = data_ERP['us03']
+                        data_ERP = data_ERP.drop(['us03'], axis=1)
+                    else:
+                        data_ERP['Inventario_us03'] = 0
                     data_ERP["Inventario_us05"] = data_ERP[col_oviedo]
                     data_ERP["Inventario_us06"] = data_ERP[col_cedi]
                     data_ERP = data_ERP.drop([col_oviedo, col_cedi], axis=1)
@@ -138,6 +150,8 @@ def pagina_meli_cedi_oviedo(feria_mode=False):
                             # Columnas que siempre son 0
                             group.loc[:, "STORE_STOCK_QUANTITY_71348291#COP1326882072"] = 0
                             group.loc[:, "STORE_STOCK_QUANTITY_71348293#COP1326882073"] = 0
+                            # Calle 74 (us03): valor ERP si calle74=True, si no 0
+                            group.loc[:, "STORE_STOCK_QUANTITY_77329299#COP1326882076"] = group["Inventario_us03"]
                             # Actualizar inventario us06
                             group.loc[:, "STORE_STOCK_QUANTITY_71843625#COP1326882074"] = group["Inventario_us06"]
                             # Actualizar inventario us05
@@ -149,6 +163,8 @@ def pagina_meli_cedi_oviedo(feria_mode=False):
                             # Columnas que siempre son 0
                             group.loc[:, "STORE_STOCK_QUANTITY_71348291#COP1326882072"] = 0
                             group.loc[:, "STORE_STOCK_QUANTITY_71348293#COP1326882073"] = 0
+                            # Calle 74 (us03): valor ERP si calle74=True, si no 0
+                            group.loc[group.SKU.notna(), "STORE_STOCK_QUANTITY_77329299#COP1326882076"] = group.loc[group.SKU.notna(), "Inventario_us03"]
                             # Actualizar inventario us06 para variaciones con SKU
                             group.loc[group.SKU.notna(), "STORE_STOCK_QUANTITY_71843625#COP1326882074"] = group.loc[group.SKU.notna(), "Inventario_us06"]
                             # Actualizar inventario us05 para variaciones con SKU
@@ -171,11 +187,12 @@ def pagina_meli_cedi_oviedo(feria_mode=False):
                     final_df['STORE_STOCK_QUANTITY_71348291#COP1326882072'] = 0
                     final_df['STORE_STOCK_QUANTITY_71348293#COP1326882073'] = 0
                     # Asegurar que las columnas de inventario activas no tengan NaN
+                    final_df['STORE_STOCK_QUANTITY_77329299#COP1326882076'] = final_df['STORE_STOCK_QUANTITY_77329299#COP1326882076'].fillna(0)
                     final_df['STORE_STOCK_QUANTITY_71843625#COP1326882074'] = final_df['STORE_STOCK_QUANTITY_71843625#COP1326882074'].fillna(0)
                     final_df['STORE_STOCK_QUANTITY_76644462#COP1326882075'] = final_df['STORE_STOCK_QUANTITY_76644462#COP1326882075'].fillna(0)
-                    
+
                     final_df['VARIATION_ID'] = final_df['VARIATION_ID'].apply(lambda x: str(int(x)) if pd.notna(x) else None)
-                    final_df = final_df.drop(['Nompro', 'Valuni', 'Inventario_us05', 'Inventario_us06', 'original_order', 'Original_Price'], axis=1)
+                    final_df = final_df.drop(['Nompro', 'Valuni', 'Inventario_us03', 'Inventario_us05', 'Inventario_us06', 'original_order', 'Original_Price'], axis=1)
 
                     wb = load_workbook(uploaded_file_meli)
                     ws = wb['Publicaciones']
@@ -204,7 +221,7 @@ def pagina_meli_cedi_oviedo(feria_mode=False):
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
-def pagina_meli_av19_bulevar_oviedo(feria_mode=False):
+def pagina_meli_av19_bulevar_oviedo(feria_mode=False, calle74=False):
     st.markdown("### 🛒 Mercado Libre - Av. 19 + Bulevar + Oviedo")
     if feria_mode:
         banner_feria()
@@ -212,7 +229,8 @@ def pagina_meli_av19_bulevar_oviedo(feria_mode=False):
     # Nuevas columnas actualizadas según el nuevo formato de Mercado Libre
     column_names = [
         'FAMILY_ID', 'ITEM_ID', 'PRODUCT_NUMBER', 'VARIATION_ID', 'SKU', 'TITLE', 'VARIATIONS',
-        'STORE_STOCK_QUANTITY_71348291#COP1326882072', 'STORE_STOCK_QUANTITY_71843625#COP1326882074',
+        'STORE_STOCK_QUANTITY_71348291#COP1326882072', 'STORE_STOCK_QUANTITY_77329299#COP1326882076',
+        'STORE_STOCK_QUANTITY_71843625#COP1326882074',
         'STORE_STOCK_QUANTITY_76644462#COP1326882075', 'STORE_STOCK_QUANTITY_71348293#COP1326882073',
         'TOTAL_STOCK_ALL_STORES', 'STOCK_FULL', 'PRICE', 'CURRENCY_ID'
     ]
@@ -227,16 +245,16 @@ def pagina_meli_av19_bulevar_oviedo(feria_mode=False):
                     # Primero leer SIN forzar nombres para validar
                     data_MELI_raw = pd.read_excel(uploaded_file_meli, header=0, skiprows=range(1, 5), sheet_name="Publicaciones")
 
-                    # Validación: verificar que tenga exactamente 15 columnas
-                    if data_MELI_raw.shape[1] != 15:
+                    # Validación: verificar que tenga exactamente 16 columnas
+                    if data_MELI_raw.shape[1] != 16:
                         st.error(f"""
     ❌ **Error: La plantilla de Mercado Libre no tiene el esquema esperado.**
 
     **Problema detectado:**
     - El archivo tiene **{data_MELI_raw.shape[1]} columnas**
-    - Se esperaban **15 columnas**
+    - Se esperaban **16 columnas**
 
-    **Se esperaban estas 15 columnas en este orden:**
+    **Se esperaban estas 16 columnas en este orden:**
     1. FAMILY_ID
     2. ITEM_ID
     3. PRODUCT_NUMBER
@@ -245,20 +263,22 @@ def pagina_meli_av19_bulevar_oviedo(feria_mode=False):
     6. TITLE
     7. VARIATIONS
     8. STORE_STOCK_QUANTITY_71348291#COP1326882072
-    9. STORE_STOCK_QUANTITY_71843625#COP1326882074
-    10. STORE_STOCK_QUANTITY_76644462#COP1326882075
-    11. STORE_STOCK_QUANTITY_71348293#COP1326882073
-    12. TOTAL_STOCK_ALL_STORES
-    13. STOCK_FULL
-    14. PRICE
-    15. CURRENCY_ID
+    9. STORE_STOCK_QUANTITY_77329299#COP1326882076
+    10. STORE_STOCK_QUANTITY_71843625#COP1326882074
+    11. STORE_STOCK_QUANTITY_76644462#COP1326882075
+    12. STORE_STOCK_QUANTITY_71348293#COP1326882073
+    13. TOTAL_STOCK_ALL_STORES
+    14. STOCK_FULL
+    15. PRICE
+    16. CURRENCY_ID
 
     **Por favor:**
     - Descarga la plantilla más reciente desde tu panel de Mercado Libre
     - O escribe a Alejandro o envía mensaje en el grupo de WhatsApp de MarketMaster
 
-    **Nota técnica:** Si estás usando una plantilla antigua, tiene columnas obsoletas como
-    CHANNEL, MARKETPLACE_PRICE, MSHOPS_PRICE, WARRANTY_TYPE, etc. que ya no se usan.
+    **Nota técnica:** El nuevo formato incluye la columna
+    STORE_STOCK_QUANTITY_77329299#COP1326882076 (Barranquilla Calle 74).
+    Si tu plantilla tiene solo 15 columnas, descárgala nuevamente desde Mercado Libre.
     """)
                         return  # Detener ejecución
 
@@ -274,11 +294,20 @@ def pagina_meli_av19_bulevar_oviedo(feria_mode=False):
                     data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
 
                     # Cargar columnas necesarias: us01 (Av.19), us02 (Bulevar), col_oviedo (Oviedo)
-                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02", col_oviedo]]
+                    erp_cols = ["Codpro", "Nompro", "Valuni", "us01", "us02", col_oviedo]
+                    if calle74:
+                        erp_cols.append("us03")
+                    data_ERP = data_ERP[erp_cols]
                     data_ERP['Valuni']   = pd.to_numeric(data_ERP['Valuni'],   errors='coerce').fillna(0)
                     data_ERP['us01']     = pd.to_numeric(data_ERP['us01'],     errors='coerce').fillna(0)
                     data_ERP['us02']     = pd.to_numeric(data_ERP['us02'],     errors='coerce').fillna(0)
                     data_ERP[col_oviedo] = pd.to_numeric(data_ERP[col_oviedo], errors='coerce').fillna(0)
+                    if calle74:
+                        data_ERP['us03'] = pd.to_numeric(data_ERP['us03'], errors='coerce').fillna(0)
+                        data_ERP['Inventario_us03'] = data_ERP['us03']
+                        data_ERP = data_ERP.drop(['us03'], axis=1)
+                    else:
+                        data_ERP['Inventario_us03'] = 0
 
                     data_ERP["Inventario_us01"] = data_ERP["us01"]
                     data_ERP["Inventario_us02"] = data_ERP["us02"]
@@ -319,6 +348,8 @@ def pagina_meli_av19_bulevar_oviedo(feria_mode=False):
                         if group.shape[0] == 1:
                             # 71348291 -> us02
                             group.loc[:, "STORE_STOCK_QUANTITY_71348291#COP1326882072"] = group["Inventario_us02"]
+                            # 77329299 -> us03 si aplica, si no 0
+                            group.loc[:, "STORE_STOCK_QUANTITY_77329299#COP1326882076"] = group["Inventario_us03"]
                             # 71348293 -> us01
                             group.loc[:, "STORE_STOCK_QUANTITY_71348293#COP1326882073"] = group["Inventario_us01"]
                             # 71843625 -> 0
@@ -328,10 +359,12 @@ def pagina_meli_av19_bulevar_oviedo(feria_mode=False):
 
                             # Actualizar precios
                             group.loc[:, "PRICE"] = group["Valuni"]
-                        
+
                         elif group.shape[0] > 1:
                             # 71348291 -> us02
                             group.loc[group.SKU.notna(), "STORE_STOCK_QUANTITY_71348291#COP1326882072"] = group.loc[group.SKU.notna(), "Inventario_us02"]
+                            # 77329299 -> us03 si aplica, si no 0
+                            group.loc[group.SKU.notna(), "STORE_STOCK_QUANTITY_77329299#COP1326882076"] = group.loc[group.SKU.notna(), "Inventario_us03"]
                             # 71348293 -> us01
                             group.loc[group.SKU.notna(), "STORE_STOCK_QUANTITY_71348293#COP1326882073"] = group.loc[group.SKU.notna(), "Inventario_us01"]
                             # 71843625 -> 0
@@ -354,12 +387,13 @@ def pagina_meli_av19_bulevar_oviedo(feria_mode=False):
 
                     # Asegurar que NO queden NaNs en las columnas que usamos
                     final_df['STORE_STOCK_QUANTITY_71348291#COP1326882072'] = final_df['STORE_STOCK_QUANTITY_71348291#COP1326882072'].fillna(0)
+                    final_df['STORE_STOCK_QUANTITY_77329299#COP1326882076'] = final_df['STORE_STOCK_QUANTITY_77329299#COP1326882076'].fillna(0)
                     final_df['STORE_STOCK_QUANTITY_71348293#COP1326882073'] = final_df['STORE_STOCK_QUANTITY_71348293#COP1326882073'].fillna(0)
                     final_df['STORE_STOCK_QUANTITY_71843625#COP1326882074'] = 0
                     final_df['STORE_STOCK_QUANTITY_76644462#COP1326882075'] = final_df['STORE_STOCK_QUANTITY_76644462#COP1326882075'].fillna(0)
 
                     final_df['VARIATION_ID'] = final_df['VARIATION_ID'].apply(lambda x: str(int(x)) if pd.notna(x) else None)
-                    final_df = final_df.drop(['Nompro', 'Valuni', 'Inventario_us01', 'Inventario_us02', 'Inventario_us05', 'original_order', 'Original_Price'], axis=1)
+                    final_df = final_df.drop(['Nompro', 'Valuni', 'Inventario_us03', 'Inventario_us01', 'Inventario_us02', 'Inventario_us05', 'original_order', 'Original_Price'], axis=1)
 
                     wb = load_workbook(uploaded_file_meli)
                     ws = wb['Publicaciones']
@@ -388,7 +422,7 @@ def pagina_meli_av19_bulevar_oviedo(feria_mode=False):
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
-def pagina_meli_av19_bulevar_cedi_oviedo(feria_mode=False):
+def pagina_meli_av19_bulevar_cedi_oviedo(feria_mode=False, calle74=False):
     st.markdown("### 🛒 Mercado Libre - Av. 19 + Bulevar + Cedi + Oviedo")
     if feria_mode:
         banner_feria()
@@ -396,7 +430,8 @@ def pagina_meli_av19_bulevar_cedi_oviedo(feria_mode=False):
     # Nuevas columnas actualizadas según el nuevo formato de Mercado Libre
     column_names = [
         'FAMILY_ID', 'ITEM_ID', 'PRODUCT_NUMBER', 'VARIATION_ID', 'SKU', 'TITLE', 'VARIATIONS',
-        'STORE_STOCK_QUANTITY_71348291#COP1326882072', 'STORE_STOCK_QUANTITY_71843625#COP1326882074',
+        'STORE_STOCK_QUANTITY_71348291#COP1326882072', 'STORE_STOCK_QUANTITY_77329299#COP1326882076',
+        'STORE_STOCK_QUANTITY_71843625#COP1326882074',
         'STORE_STOCK_QUANTITY_76644462#COP1326882075', 'STORE_STOCK_QUANTITY_71348293#COP1326882073',
         'TOTAL_STOCK_ALL_STORES', 'STOCK_FULL', 'PRICE', 'CURRENCY_ID'
     ]
@@ -411,16 +446,16 @@ def pagina_meli_av19_bulevar_cedi_oviedo(feria_mode=False):
                     # Primero leer SIN forzar nombres para validar
                     data_MELI_raw = pd.read_excel(uploaded_file_meli, header=0, skiprows=range(1, 5), sheet_name="Publicaciones")
 
-                    # Validación: verificar que tenga exactamente 15 columnas
-                    if data_MELI_raw.shape[1] != 15:
+                    # Validación: verificar que tenga exactamente 16 columnas
+                    if data_MELI_raw.shape[1] != 16:
                         st.error(f"""
     ❌ **Error: La plantilla de Mercado Libre no tiene el esquema esperado.**
 
     **Problema detectado:**
     - El archivo tiene **{data_MELI_raw.shape[1]} columnas**
-    - Se esperaban **15 columnas**
+    - Se esperaban **16 columnas**
 
-    **Se esperaban estas 15 columnas en este orden:**
+    **Se esperaban estas 16 columnas en este orden:**
     1. FAMILY_ID
     2. ITEM_ID
     3. PRODUCT_NUMBER
@@ -429,20 +464,22 @@ def pagina_meli_av19_bulevar_cedi_oviedo(feria_mode=False):
     6. TITLE
     7. VARIATIONS
     8. STORE_STOCK_QUANTITY_71348291#COP1326882072
-    9. STORE_STOCK_QUANTITY_71843625#COP1326882074
-    10. STORE_STOCK_QUANTITY_76644462#COP1326882075
-    11. STORE_STOCK_QUANTITY_71348293#COP1326882073
-    12. TOTAL_STOCK_ALL_STORES
-    13. STOCK_FULL
-    14. PRICE
-    15. CURRENCY_ID
+    9. STORE_STOCK_QUANTITY_77329299#COP1326882076
+    10. STORE_STOCK_QUANTITY_71843625#COP1326882074
+    11. STORE_STOCK_QUANTITY_76644462#COP1326882075
+    12. STORE_STOCK_QUANTITY_71348293#COP1326882073
+    13. TOTAL_STOCK_ALL_STORES
+    14. STOCK_FULL
+    15. PRICE
+    16. CURRENCY_ID
 
     **Por favor:**
     - Descarga la plantilla más reciente desde tu panel de Mercado Libre
     - O escribe a Alejandro o envía mensaje en el grupo de WhatsApp de MarketMaster
 
-    **Nota técnica:** Si estás usando una plantilla antigua, tiene columnas obsoletas como
-    CHANNEL, MARKETPLACE_PRICE, MSHOPS_PRICE, WARRANTY_TYPE, etc. que ya no se usan.
+    **Nota técnica:** El nuevo formato incluye la columna
+    STORE_STOCK_QUANTITY_77329299#COP1326882076 (Barranquilla Calle 74).
+    Si tu plantilla tiene solo 15 columnas, descárgala nuevamente desde Mercado Libre.
     """)
                         return  # Detener ejecución
 
@@ -459,12 +496,21 @@ def pagina_meli_av19_bulevar_cedi_oviedo(feria_mode=False):
                     data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
 
                     # Cargar columnas necesarias: us01 (Av.19), us02 (Bulevar), col_oviedo, col_cedi
-                    data_ERP = data_ERP[["Codpro", "Nompro", "Valuni", "us01", "us02", col_oviedo, col_cedi]]
+                    erp_cols = ["Codpro", "Nompro", "Valuni", "us01", "us02", col_oviedo, col_cedi]
+                    if calle74:
+                        erp_cols.append("us03")
+                    data_ERP = data_ERP[erp_cols]
                     data_ERP['Valuni']   = pd.to_numeric(data_ERP['Valuni'],   errors='coerce').fillna(0)
                     data_ERP['us01']     = pd.to_numeric(data_ERP['us01'],     errors='coerce').fillna(0)
                     data_ERP['us02']     = pd.to_numeric(data_ERP['us02'],     errors='coerce').fillna(0)
                     data_ERP[col_oviedo] = pd.to_numeric(data_ERP[col_oviedo], errors='coerce').fillna(0)
                     data_ERP[col_cedi]   = pd.to_numeric(data_ERP[col_cedi],   errors='coerce').fillna(0)
+                    if calle74:
+                        data_ERP['us03'] = pd.to_numeric(data_ERP['us03'], errors='coerce').fillna(0)
+                        data_ERP['Inventario_us03'] = data_ERP['us03']
+                        data_ERP = data_ERP.drop(['us03'], axis=1)
+                    else:
+                        data_ERP['Inventario_us03'] = 0
 
                     data_ERP["Inventario_us01"] = data_ERP["us01"]
                     data_ERP["Inventario_us02"] = data_ERP["us02"]
@@ -507,6 +553,8 @@ def pagina_meli_av19_bulevar_cedi_oviedo(feria_mode=False):
                         if group.shape[0] == 1:
                             # 71348291 -> us02
                             group.loc[:, "STORE_STOCK_QUANTITY_71348291#COP1326882072"] = group["Inventario_us02"]
+                            # 77329299 -> us03 si aplica, si no 0
+                            group.loc[:, "STORE_STOCK_QUANTITY_77329299#COP1326882076"] = group["Inventario_us03"]
                             # 71348293 -> us01
                             group.loc[:, "STORE_STOCK_QUANTITY_71348293#COP1326882073"] = group["Inventario_us01"]
                             # 71843625 -> us06
@@ -520,6 +568,8 @@ def pagina_meli_av19_bulevar_cedi_oviedo(feria_mode=False):
                         elif group.shape[0] > 1:
                             # 71348291 -> us02
                             group.loc[group.SKU.notna(), "STORE_STOCK_QUANTITY_71348291#COP1326882072"] = group.loc[group.SKU.notna(), "Inventario_us02"]
+                            # 77329299 -> us03 si aplica, si no 0
+                            group.loc[group.SKU.notna(), "STORE_STOCK_QUANTITY_77329299#COP1326882076"] = group.loc[group.SKU.notna(), "Inventario_us03"]
                             # 71348293 -> us01
                             group.loc[group.SKU.notna(), "STORE_STOCK_QUANTITY_71348293#COP1326882073"] = group.loc[group.SKU.notna(), "Inventario_us01"]
                             # 71843625 -> us06
@@ -542,12 +592,13 @@ def pagina_meli_av19_bulevar_cedi_oviedo(feria_mode=False):
 
                     # Asegurar que NO queden NaNs en las columnas que usamos
                     final_df['STORE_STOCK_QUANTITY_71348291#COP1326882072'] = final_df['STORE_STOCK_QUANTITY_71348291#COP1326882072'].fillna(0)
+                    final_df['STORE_STOCK_QUANTITY_77329299#COP1326882076'] = final_df['STORE_STOCK_QUANTITY_77329299#COP1326882076'].fillna(0)
                     final_df['STORE_STOCK_QUANTITY_71348293#COP1326882073'] = final_df['STORE_STOCK_QUANTITY_71348293#COP1326882073'].fillna(0)
                     final_df['STORE_STOCK_QUANTITY_71843625#COP1326882074'] = final_df['STORE_STOCK_QUANTITY_71843625#COP1326882074'].fillna(0)
                     final_df['STORE_STOCK_QUANTITY_76644462#COP1326882075'] = final_df['STORE_STOCK_QUANTITY_76644462#COP1326882075'].fillna(0)
 
                     final_df['VARIATION_ID'] = final_df['VARIATION_ID'].apply(lambda x: str(int(x)) if pd.notna(x) else None)
-                    final_df = final_df.drop(['Nompro', 'Valuni', 'Inventario_us01', 'Inventario_us02', 'Inventario_us05', 'Inventario_us06', 'original_order', 'Original_Price'], axis=1)
+                    final_df = final_df.drop(['Nompro', 'Valuni', 'Inventario_us03', 'Inventario_us01', 'Inventario_us02', 'Inventario_us05', 'Inventario_us06', 'original_order', 'Original_Price'], axis=1)
 
                     wb = load_workbook(uploaded_file_meli)
                     ws = wb['Publicaciones']
@@ -1174,8 +1225,11 @@ def main():
     # Menú de selección en la barra lateral
     opciones = [
         "Mercado Libre - Cedi + Oviedo",
+        "Mercado Libre - Cedi + Oviedo + Calle 74",
         "Mercado Libre - Av. 19 + Bulevar + Oviedo",
+        "Mercado Libre - Av. 19 + Bulevar + Oviedo + Calle 74",
         "Mercado Libre - Av. 19 + Bulevar + Cedi + Oviedo",
+        "Mercado Libre - Av. 19 + Bulevar + Cedi + Oviedo + Calle 74",
         "Falabella",
         "Rappi - Bogotá",
         "Rappi - Barranquilla",
@@ -1204,10 +1258,16 @@ def main():
     # Lógica para mostrar la página correcta según la selección
     if opcion == "Mercado Libre - Cedi + Oviedo":
         pagina_meli_cedi_oviedo(feria_mode)
+    elif opcion == "Mercado Libre - Cedi + Oviedo + Calle 74":
+        pagina_meli_cedi_oviedo(feria_mode, calle74=True)
     elif opcion == "Mercado Libre - Av. 19 + Bulevar + Oviedo":
         pagina_meli_av19_bulevar_oviedo(feria_mode)
+    elif opcion == "Mercado Libre - Av. 19 + Bulevar + Oviedo + Calle 74":
+        pagina_meli_av19_bulevar_oviedo(feria_mode, calle74=True)
     elif opcion == "Mercado Libre - Av. 19 + Bulevar + Cedi + Oviedo":
         pagina_meli_av19_bulevar_cedi_oviedo(feria_mode)
+    elif opcion == "Mercado Libre - Av. 19 + Bulevar + Cedi + Oviedo + Calle 74":
+        pagina_meli_av19_bulevar_cedi_oviedo(feria_mode, calle74=True)
     elif opcion == "Falabella":
         pagina_falabella(feria_mode)
     elif opcion == "Rappi - Bogotá":
