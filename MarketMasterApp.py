@@ -990,7 +990,7 @@ def pagina_shopify(feria_mode=False):
     st.markdown("---")
     st.markdown("#### 💰 Actualizar Precios")
 
-    uploaded_products_shopify = st.file_uploader("📤 Cargar archivo CSV de Shopify (Products Export)", type=['csv'], key="shopify_price_csv")
+    uploaded_products_shopify = st.file_uploader("📤 Cargar archivo(s) CSV de Shopify (Products Export)", type=['csv'], key="shopify_price_csv", accept_multiple_files=True)
     uploaded_products_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="shopify_price_erp")
 
     if uploaded_products_shopify and uploaded_products_erp:
@@ -998,7 +998,11 @@ def pagina_shopify(feria_mode=False):
             with st.spinner('Procesando archivos...'):
                 try:
                     # Leer todo como texto para preservar el formato exacto del archivo
-                    data_shopify = pd.read_csv(uploaded_products_shopify, dtype=str, keep_default_na=False)
+                    # Shopify puede exportar el catálogo de productos partido en varios CSV con las mismas columnas
+                    data_shopify = pd.concat(
+                        [pd.read_csv(f, dtype=str, keep_default_na=False) for f in uploaded_products_shopify],
+                        ignore_index=True
+                    )
 
                     data_ERP = pd.read_csv(uploaded_products_erp, delimiter=';', encoding='latin1', low_memory=False)
                     data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
