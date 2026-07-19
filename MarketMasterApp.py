@@ -946,6 +946,13 @@ def pagina_shopify(feria_mode=False):
     if feria_mode:
         banner_feria()
 
+    tipo_dia_shopify = st.radio(
+        "📅 Inventario para:",
+        ["Lunes a viernes", "Sábado o domingo"],
+        horizontal=True,
+        key="shopify_inventory_day_type"
+    )
+
     uploaded_file_shopify = st.file_uploader("📤 Cargar archivo CSV de Shopify (Inventory Export)", type=['csv'], key="shopify_inv_csv")
     uploaded_file_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="shopify_inv_erp")
 
@@ -957,11 +964,17 @@ def pagina_shopify(feria_mode=False):
 
                     data_ERP = pd.read_csv(uploaded_file_erp, delimiter=';', encoding='latin1', low_memory=False)
                     data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
-                    data_ERP = data_ERP[["Codpro", "us01", "us02"]]
-                    data_ERP['us01'] = pd.to_numeric(data_ERP['us01'], errors='coerce').fillna(0)
-                    data_ERP['us02'] = pd.to_numeric(data_ERP['us02'], errors='coerce').fillna(0)
-                    data_ERP["Inventario_Shopify"] = data_ERP["us01"] + data_ERP["us02"]
-                    data_ERP.drop(["us01", "us02"], axis=1, inplace=True)
+
+                    mapa = COLUMNAS_FERIA if feria_mode else COLUMNAS_NORMAL
+                    cols_inventario = ["us01", "us02"]
+                    if tipo_dia_shopify == "Lunes a viernes":
+                        cols_inventario.append(mapa["cedi"])
+
+                    data_ERP = data_ERP[["Codpro"] + cols_inventario]
+                    for col in cols_inventario:
+                        data_ERP[col] = pd.to_numeric(data_ERP[col], errors='coerce').fillna(0)
+                    data_ERP["Inventario_Shopify"] = data_ERP[cols_inventario].sum(axis=1)
+                    data_ERP.drop(cols_inventario, axis=1, inplace=True)
                     data_ERP.rename(columns={'Codpro': 'SKU'}, inplace=True)
                     data_ERP['SKU'] = data_ERP['SKU'].astype(str).str.strip()
 
@@ -976,6 +989,8 @@ def pagina_shopify(feria_mode=False):
                     output = merged.to_csv(index=False, encoding='utf-8')
 
                     st.success("✅ ¡Archivo de Shopify procesado!")
+                    puntos = "Av. 19 + Bulevar + Cedi" if tipo_dia_shopify == "Lunes a viernes" else "Av. 19 + Bulevar"
+                    st.info(f"Inventario calculado con: {puntos}")
                     st.dataframe(merged[['Handle', 'SKU', 'On hand (current)', 'On hand (new)']].head())
                     st.download_button(
                         label="⬇️ Descargar Shopify modificado",
