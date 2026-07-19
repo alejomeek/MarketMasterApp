@@ -1253,8 +1253,6 @@ def main():
         "Rappi - Bogotá",
         "Rappi - Barranquilla",
         "Rappi - Medellín",
-        "Wix - Av. 19 + Bulevar",
-        "Wix - Av. 19 + Bulevar + Cedi",
         "Shopify",
         "Addi"
     ]
@@ -1322,10 +1320,6 @@ def main():
                 erp_cols=["Codpro", "Nompro", "Valuni", "us05"],
                 key_suffix="med"
             )
-    elif opcion == "Wix - Av. 19 + Bulevar":
-        pagina_wix(feria_mode)
-    elif opcion == "Wix - Av. 19 + Bulevar + Cedi":
-        pagina_wix_av19_bulevar_cedi(feria_mode)
     elif opcion == "Shopify":
         pagina_shopify(feria_mode)
     elif opcion == "Addi":

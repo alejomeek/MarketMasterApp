@@ -102,7 +102,9 @@ Los SKUs en Rappi tienen prefijo `jugandoyeducandoco_` que se limpia antes del c
 
 ---
 
-### Wix
+### Wix — deprecado
+
+**Canal deprecado:** ya no se vende por Wix. Las funciones antiguas siguen en `MarketMasterApp.py` solo por trazabilidad, pero las opciones de Wix fueron retiradas del menú principal y no deben usarse para operación diaria.
 
 CSV de exportación de Wix. Tiene 53 columnas con nombres fijos definidos en `column_names`.
 
