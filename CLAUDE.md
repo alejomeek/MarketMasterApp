@@ -137,7 +137,7 @@ Opción independiente del menú. Es una copia funcional de la página Shopify no
 
 `Maisto`, `Clementoni`, `Learning Resources`, `Asmodee`, `Be Amazing! Toys`, `VTech`, `Infantino`.
 
-Entrada para precios: CSV(s) de "Products Export" de Shopify. La sección de precios con descuento no usa ERP.
+Entrada para precios: CSV(s) de "Products Export" de Shopify + CSV de ERP, igual que Shopify normal. La sección de precios con descuento pide el ERP para mantener el mismo flujo operativo, pero el cálculo del descuento usa el precio actual del Products Export.
 
 Lógica:
 - Detecta marca desde `Marca (product.metafields.custom.marca)` si existe, o desde `Vendor`.

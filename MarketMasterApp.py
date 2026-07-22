@@ -1103,8 +1103,9 @@ def pagina_shopify_descuento_precios():
         key="shopify_discount_csv",
         accept_multiple_files=True
     )
+    uploaded_products_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="shopify_discount_erp")
 
-    if uploaded_products_shopify:
+    if uploaded_products_shopify and uploaded_products_erp:
         if st.button('🔄 Procesar Descuento Shopify', key="shopify_discount_process"):
             with st.spinner('Procesando archivos...'):
                 try:
