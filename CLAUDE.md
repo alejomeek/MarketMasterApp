@@ -142,7 +142,8 @@ Entrada para precios: CSV(s) de "Products Export" de Shopify + CSV de ERP, igual
 Lógica:
 - Detecta marca desde `Marca (product.metafields.custom.marca)` si existe, o desde `Vendor`.
 - Aplica el match por producto/`Handle` para cubrir variantes aunque Shopify deje la marca vacía en filas secundarias.
-- Para marcas con descuento: copia el `Variant Price` actual a `Variant Compare At Price`, calcula `Variant Price = precio_actual * 0.90` y redondea a la centena más cercana.
+- Primero cruza todos los SKUs contra ERP y toma `Valuni` como precio base.
+- Para marcas con descuento: copia `Valuni` a `Variant Compare At Price`, calcula `Variant Price = Valuni * 0.90` y redondea a la centena más cercana.
 - Para todas las demás marcas: actualiza `Variant Price` con `Valuni` del ERP, igual que Shopify normal.
 - Exporta columnas mínimas: `Handle`, `Title`, `Variant SKU`, `Variant Price`, `Variant Compare At Price`.
 

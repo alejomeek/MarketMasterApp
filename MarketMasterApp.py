@@ -1094,7 +1094,7 @@ def pagina_shopify_descuento_precios():
     st.info(
         "Aplica 10% de descuento permanente a: "
         + ", ".join(MARCAS_DESCUENTO_SHOPIFY)
-        + ". El precio actual pasa a precio de comparación y el nuevo precio de venta se redondea a la centena más cercana."
+        + ". Primero cruza precios con ERP; para estas marcas, el precio ERP pasa a precio de comparación y el nuevo precio de venta se redondea a la centena más cercana."
     )
 
     uploaded_products_shopify = st.file_uploader(
@@ -1155,30 +1155,23 @@ def pagina_shopify_descuento_precios():
                     temp = sku_clean.to_frame(name='SKU_clean').merge(
                         data_ERP, left_on='SKU_clean', right_on='Codpro', how='left'
                     )
-                    precio_actual = pd.to_numeric(
-                        data_shopify['Variant Price']
-                        .astype(str)
-                        .str.lstrip("'")
-                        .str.replace(r'[$\s]', '', regex=True)
-                        .str.replace(',', '', regex=False),
-                        errors='coerce'
-                    )
+                    precio_erp = temp['Valuni']
 
                     mask_descuento = (
                         marca_normalizada.isin(marcas_objetivo)
                         & (sku_clean.str.len() > 0)
-                        & precio_actual.notna()
+                        & precio_erp.notna()
                     )
                     mask_erp = (
                         ~marca_normalizada.isin(marcas_objetivo)
                         & (sku_clean.str.len() > 0)
-                        & temp['Valuni'].notna()
+                        & precio_erp.notna()
                     )
 
-                    precios_descuento = precio_actual[mask_descuento].mul(0.90).apply(redondear_centena_mas_cercana)
-                    data_shopify.loc[mask_descuento, 'Variant Compare At Price'] = precio_actual[mask_descuento].apply(lambda x: f"{x:.2f}")
+                    precios_descuento = precio_erp[mask_descuento].mul(0.90).apply(redondear_centena_mas_cercana)
+                    data_shopify.loc[mask_descuento, 'Variant Compare At Price'] = precio_erp[mask_descuento].apply(lambda x: f"{x:.2f}")
                     data_shopify.loc[mask_descuento, 'Variant Price'] = precios_descuento.apply(lambda x: f"{x:.2f}")
-                    data_shopify.loc[mask_erp, 'Variant Price'] = temp.loc[mask_erp, 'Valuni'].apply(lambda x: f"{x:.2f}")
+                    data_shopify.loc[mask_erp, 'Variant Price'] = precio_erp[mask_erp].apply(lambda x: f"{x:.2f}")
 
                     cols_export = ['Handle', 'Title', 'Variant SKU', 'Variant Price', 'Variant Compare At Price']
                     data_export = data_shopify[cols_export]
@@ -1197,7 +1190,7 @@ def pagina_shopify_descuento_precios():
                         resumen = (
                             pd.DataFrame({
                                 'Marca': marca_producto[mask_descuento],
-                                'Precio anterior': precio_actual[mask_descuento],
+                                'Precio ERP': precio_erp[mask_descuento],
                                 'Precio nuevo': precios_descuento,
                             })
                             .groupby('Marca')
