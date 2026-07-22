@@ -131,11 +131,13 @@ Los SKUs del export de Shopify pueden tener prefijo `'` (truco de Excel) que se 
 
 ### Shopify con descuento
 
-Opción independiente del menú para aplicar un descuento permanente del 10% a productos de estas marcas:
+Opción independiente del menú. Es una copia funcional de la página Shopify normal:
+- **Inventario:** mismo flujo que Shopify normal, con selector `Lunes a viernes` / `Sábado o domingo` y soporte de modo Feria.
+- **Precios:** aplica un descuento permanente del 10% a productos de estas marcas:
 
 `Maisto`, `Clementoni`, `Learning Resources`, `Asmodee`, `Be Amazing! Toys`, `VTech`, `Infantino`.
 
-Entrada: CSV(s) de "Products Export" de Shopify. No usa ERP.
+Entrada para precios: CSV(s) de "Products Export" de Shopify. La sección de precios con descuento no usa ERP.
 
 Lógica:
 - Detecta marca desde `Marca (product.metafields.custom.marca)` si existe, o desde `Vendor`.

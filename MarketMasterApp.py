@@ -952,23 +952,25 @@ def pagina_wix_av19_bulevar_cedi(feria_mode=False):
                     st.error(f"❌ Error al procesar: {e}")
 
 # --- LÓGICA PARA SHOPIFY ---
-def pagina_shopify(feria_mode=False):
+def pagina_shopify(feria_mode=False, descuento_mode=False):
     st.markdown("### 🛍️ Shopify - Inventario")
     if feria_mode:
         banner_feria()
+
+    key_prefix = "shopify_discount" if descuento_mode else "shopify"
 
     tipo_dia_shopify = st.radio(
         "📅 Inventario para:",
         ["Lunes a viernes", "Sábado o domingo"],
         horizontal=True,
-        key="shopify_inventory_day_type"
+        key=f"{key_prefix}_inventory_day_type"
     )
 
-    uploaded_file_shopify = st.file_uploader("📤 Cargar archivo CSV de Shopify (Inventory Export)", type=['csv'], key="shopify_inv_csv")
-    uploaded_file_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="shopify_inv_erp")
+    uploaded_file_shopify = st.file_uploader("📤 Cargar archivo CSV de Shopify (Inventory Export)", type=['csv'], key=f"{key_prefix}_inv_csv")
+    uploaded_file_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key=f"{key_prefix}_inv_erp")
 
     if uploaded_file_shopify and uploaded_file_erp:
-        if st.button('🔄 Procesar Shopify', key="shopify_inv_process"):
+        if st.button('🔄 Procesar Shopify', key=f"{key_prefix}_inv_process"):
             with st.spinner('Procesando archivos...'):
                 try:
                     data_shopify = pd.read_csv(uploaded_file_shopify, dtype={'SKU': str})
@@ -1015,6 +1017,10 @@ def pagina_shopify(feria_mode=False):
     # ── Sección 2: Precios ─────────────────────────────────────────────
     st.markdown("---")
     st.markdown("#### 💰 Actualizar Precios")
+
+    if descuento_mode:
+        pagina_shopify_descuento_precios()
+        return
 
     uploaded_products_shopify = st.file_uploader("📤 Cargar archivo(s) CSV de Shopify (Products Export)", type=['csv'], key="shopify_price_csv", accept_multiple_files=True)
     uploaded_products_erp = st.file_uploader("🧾 Cargar archivo CSV de ERP", type=['csv'], key="shopify_price_erp")
@@ -1084,8 +1090,7 @@ def normalizar_marca_shopify(valor):
 def redondear_centena_mas_cercana(valor):
     return int(np.floor((valor / 100) + 0.5) * 100)
 
-def pagina_shopify_descuento():
-    st.markdown("### 🏷️ Shopify - Descuento 10% por marca")
+def pagina_shopify_descuento_precios():
     st.info(
         "Aplica 10% de descuento permanente a: "
         + ", ".join(MARCAS_DESCUENTO_SHOPIFY)
@@ -1190,6 +1195,9 @@ def pagina_shopify_descuento():
                     )
                 except Exception as e:
                     st.error(f"❌ Error al procesar descuento Shopify: {e}")
+
+def pagina_shopify_descuento(feria_mode=False):
+    pagina_shopify(feria_mode, descuento_mode=True)
 
 # --- LÓGICA PARA ADDI ---
 def pagina_addi(feria_mode=False):
@@ -1453,7 +1461,7 @@ def main():
     elif opcion == "Shopify":
         pagina_shopify(feria_mode)
     elif opcion == "Shopify con descuento":
-        pagina_shopify_descuento()
+        pagina_shopify_descuento(feria_mode)
     elif opcion == "Addi":
         pagina_addi(feria_mode)
 
