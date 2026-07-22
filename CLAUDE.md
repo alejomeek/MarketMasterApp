@@ -121,10 +121,29 @@ El campo `visible` se calcula: `TRUE` si `inventory > 0`, `FALSE` si no. El outp
 
 Dos secciones independientes en la misma página:
 
-1. **Inventario:** CSV de "Inventory Export". Bodegas: `us01 + us02`. Columna de salida: `On hand (new)`.
+1. **Inventario:** CSV de "Inventory Export". Selector manual:
+   - `Lunes a viernes`: `us01 + us02 + col_cedi` (normal `us06`, feria `us07`).
+   - `Sábado o domingo`: `us01 + us02`.
+   Columna de salida: `On hand (new)`.
 2. **Precios:** CSV de "Products Export". Solo actualiza `Variant Price` donde hay match por SKU. Exporta solo 4 columnas mínimas: `Handle`, `Title`, `Variant SKU`, `Variant Price`.
 
 Los SKUs del export de Shopify pueden tener prefijo `'` (truco de Excel) que se limpia con `str.lstrip("'")` solo para el cruce, sin modificar la columna original.
+
+### Shopify con descuento
+
+Opción independiente del menú para aplicar un descuento permanente del 10% a productos de estas marcas:
+
+`Maisto`, `Clementoni`, `Learning Resources`, `Asmodee`, `Be Amazing! Toys`, `VTech`, `Infantino`.
+
+Entrada: CSV(s) de "Products Export" de Shopify. No usa ERP.
+
+Lógica:
+- Detecta marca desde `Marca (product.metafields.custom.marca)` si existe, o desde `Vendor`.
+- Aplica el match por producto/`Handle` para cubrir variantes aunque Shopify deje la marca vacía en filas secundarias.
+- Copia el `Variant Price` actual a `Variant Compare At Price`.
+- Calcula el nuevo `Variant Price` como `precio_actual * 0.90`.
+- Redondea el resultado a la centena más cercana, dejando los últimos dos dígitos en `00`.
+- Exporta solo filas de variantes afectadas con columnas mínimas: `Handle`, `Title`, `Variant SKU`, `Variant Price`, `Variant Compare At Price`.
 
 ---
 

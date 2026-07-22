@@ -4,6 +4,7 @@ from io import BytesIO
 from openpyxl import load_workbook
 from PIL import Image
 import numpy as np
+import unicodedata
 
 # --- CONFIGURACIÓN GENERAL DE LA PÁGINA ---
 st.set_page_config(
@@ -22,6 +23,16 @@ COLUMNAS_FERIA = {
     'oviedo': 'us06',
     'cedi':   'us07',
 }
+
+MARCAS_DESCUENTO_SHOPIFY = [
+    "Maisto",
+    "Clementoni",
+    "Learning Resources",
+    "Asmodee",
+    "Be Amazing! Toys",
+    "VTech",
+    "Infantino",
+]
 
 def banner_feria():
     st.warning("🎪 **Modo Feria del Libro ACTIVO** — El ERP usa: `us05` = Feria · `us06` = Oviedo · `us07` = Cedi")
@@ -1062,6 +1073,124 @@ def pagina_shopify(feria_mode=False):
                 except Exception as e:
                     st.error(f"❌ Error al procesar precios: {e}")
 
+def normalizar_marca_shopify(valor):
+    texto = str(valor).strip().casefold()
+    texto = ''.join(
+        char for char in unicodedata.normalize('NFKD', texto)
+        if not unicodedata.combining(char)
+    )
+    return ''.join(char for char in texto if char.isalnum())
+
+def redondear_centena_mas_cercana(valor):
+    return int(np.floor((valor / 100) + 0.5) * 100)
+
+def pagina_shopify_descuento():
+    st.markdown("### 🏷️ Shopify - Descuento 10% por marca")
+    st.info(
+        "Aplica 10% de descuento permanente a: "
+        + ", ".join(MARCAS_DESCUENTO_SHOPIFY)
+        + ". El precio actual pasa a precio de comparación y el nuevo precio de venta se redondea a la centena más cercana."
+    )
+
+    uploaded_products_shopify = st.file_uploader(
+        "📤 Cargar archivo(s) CSV de Shopify (Products Export)",
+        type=['csv'],
+        key="shopify_discount_csv",
+        accept_multiple_files=True
+    )
+
+    if uploaded_products_shopify:
+        if st.button('🔄 Procesar Descuento Shopify', key="shopify_discount_process"):
+            with st.spinner('Procesando archivos...'):
+                try:
+                    data_shopify = pd.concat(
+                        [pd.read_csv(f, dtype=str, keep_default_na=False) for f in uploaded_products_shopify],
+                        ignore_index=True
+                    )
+
+                    required_cols = ['Handle', 'Variant SKU', 'Variant Price']
+                    missing_cols = [col for col in required_cols if col not in data_shopify.columns]
+                    if missing_cols:
+                        st.error(f"❌ El archivo no tiene las columnas requeridas: {', '.join(missing_cols)}")
+                        return
+
+                    if 'Variant Compare At Price' not in data_shopify.columns:
+                        data_shopify['Variant Compare At Price'] = ''
+                    if 'Title' not in data_shopify.columns:
+                        data_shopify['Title'] = ''
+
+                    marca_metafield = 'Marca (product.metafields.custom.marca)'
+                    brand_cols = [col for col in [marca_metafield, 'Vendor'] if col in data_shopify.columns]
+                    if not brand_cols:
+                        st.error("❌ El archivo no tiene columna de marca (`Vendor` o metafield `Marca`).")
+                        return
+
+                    marca_fila = pd.Series('', index=data_shopify.index, dtype='object')
+                    for col in brand_cols:
+                        valores = data_shopify[col].astype(str).str.strip()
+                        marca_fila = marca_fila.where(marca_fila.str.len() > 0, valores)
+
+                    marca_producto = (
+                        marca_fila.replace('', np.nan)
+                        .groupby(data_shopify['Handle'])
+                        .transform('first')
+                        .fillna('')
+                    )
+                    marcas_objetivo = {normalizar_marca_shopify(marca) for marca in MARCAS_DESCUENTO_SHOPIFY}
+                    marca_normalizada = marca_producto.apply(normalizar_marca_shopify)
+
+                    sku_clean = data_shopify['Variant SKU'].astype(str).str.lstrip("'").str.strip()
+                    precio_actual = pd.to_numeric(
+                        data_shopify['Variant Price']
+                        .astype(str)
+                        .str.lstrip("'")
+                        .str.replace(r'[$\s]', '', regex=True)
+                        .str.replace(',', '', regex=False),
+                        errors='coerce'
+                    )
+
+                    mask = (
+                        marca_normalizada.isin(marcas_objetivo)
+                        & (sku_clean.str.len() > 0)
+                        & precio_actual.notna()
+                    )
+
+                    precios_descuento = precio_actual[mask].mul(0.90).apply(redondear_centena_mas_cercana)
+                    data_shopify.loc[mask, 'Variant Compare At Price'] = precio_actual[mask].apply(lambda x: f"{x:.2f}")
+                    data_shopify.loc[mask, 'Variant Price'] = precios_descuento.apply(lambda x: f"{x:.2f}")
+
+                    cols_export = ['Handle', 'Title', 'Variant SKU', 'Variant Price', 'Variant Compare At Price']
+                    data_export = data_shopify.loc[mask, cols_export]
+                    output = data_export.to_csv(index=False, encoding='utf-8')
+
+                    st.success(f"✅ Descuento aplicado a {mask.sum()} variante(s) de Shopify.")
+                    if mask.any():
+                        resumen = (
+                            pd.DataFrame({
+                                'Marca': marca_producto[mask],
+                                'Precio anterior': precio_actual[mask],
+                                'Precio nuevo': precios_descuento,
+                            })
+                            .groupby('Marca')
+                            .agg(Variantes=('Marca', 'size'))
+                            .reset_index()
+                        )
+                        st.dataframe(resumen)
+                        preview = data_export.copy()
+                        preview['Marca'] = marca_producto[mask].values
+                        st.dataframe(preview[['Handle', 'Title', 'Marca', 'Variant SKU', 'Variant Compare At Price', 'Variant Price']].head(20))
+                    else:
+                        st.warning("⚠️ No se encontraron variantes con SKU, precio válido y marca objetivo.")
+
+                    st.download_button(
+                        label="⬇️ Descargar Shopify con descuento",
+                        data=output,
+                        file_name="Shopify_Descuento_10_Marcas_ACTUALIZADO.csv",
+                        mime="text/csv"
+                    )
+                except Exception as e:
+                    st.error(f"❌ Error al procesar descuento Shopify: {e}")
+
 # --- LÓGICA PARA ADDI ---
 def pagina_addi(feria_mode=False):
     st.markdown("### 🟣 Addi")
@@ -1254,6 +1383,7 @@ def main():
         "Rappi - Barranquilla",
         "Rappi - Medellín",
         "Shopify",
+        "Shopify con descuento",
         "Addi"
     ]
     opcion = st.sidebar.selectbox("Plataforma:", opciones)
@@ -1322,6 +1452,8 @@ def main():
             )
     elif opcion == "Shopify":
         pagina_shopify(feria_mode)
+    elif opcion == "Shopify con descuento":
+        pagina_shopify_descuento()
     elif opcion == "Addi":
         pagina_addi(feria_mode)
 
