@@ -137,15 +137,14 @@ Opción independiente del menú. Es una copia funcional de la página Shopify no
 
 `Maisto`, `Clementoni`, `Learning Resources`, `Asmodee`, `Be Amazing! Toys`, `VTech`, `Infantino`.
 
-Entrada para precios: CSV(s) de "Products Export" de Shopify + CSV de ERP, igual que Shopify normal. La sección de precios con descuento pide el ERP para mantener el mismo flujo operativo, pero el cálculo del descuento usa el precio actual del Products Export.
+Entrada para precios: CSV(s) de "Products Export" de Shopify + CSV de ERP, igual que Shopify normal.
 
 Lógica:
 - Detecta marca desde `Marca (product.metafields.custom.marca)` si existe, o desde `Vendor`.
 - Aplica el match por producto/`Handle` para cubrir variantes aunque Shopify deje la marca vacía en filas secundarias.
-- Copia el `Variant Price` actual a `Variant Compare At Price`.
-- Calcula el nuevo `Variant Price` como `precio_actual * 0.90`.
-- Redondea el resultado a la centena más cercana, dejando los últimos dos dígitos en `00`.
-- Exporta solo filas de variantes afectadas con columnas mínimas: `Handle`, `Title`, `Variant SKU`, `Variant Price`, `Variant Compare At Price`.
+- Para marcas con descuento: copia el `Variant Price` actual a `Variant Compare At Price`, calcula `Variant Price = precio_actual * 0.90` y redondea a la centena más cercana.
+- Para todas las demás marcas: actualiza `Variant Price` con `Valuni` del ERP, igual que Shopify normal.
+- Exporta columnas mínimas: `Handle`, `Title`, `Variant SKU`, `Variant Price`, `Variant Compare At Price`.
 
 ---
 

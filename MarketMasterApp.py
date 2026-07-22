@@ -1114,6 +1114,12 @@ def pagina_shopify_descuento_precios():
                         ignore_index=True
                     )
 
+                    data_ERP = pd.read_csv(uploaded_products_erp, delimiter=';', encoding='latin1', low_memory=False)
+                    data_ERP = data_ERP[data_ERP['Codpro'].notna() & ~(data_ERP['Codpro'].isin(['', ' ']) | (data_ERP['Codpro'].str.contains('\x1a', na=False)))]
+                    data_ERP = data_ERP[["Codpro", "Valuni"]]
+                    data_ERP['Valuni'] = pd.to_numeric(data_ERP['Valuni'], errors='coerce')
+                    data_ERP['Codpro'] = data_ERP['Codpro'].astype(str).str.strip()
+
                     required_cols = ['Handle', 'Variant SKU', 'Variant Price']
                     missing_cols = [col for col in required_cols if col not in data_shopify.columns]
                     if missing_cols:
@@ -1146,6 +1152,9 @@ def pagina_shopify_descuento_precios():
                     marca_normalizada = marca_producto.apply(normalizar_marca_shopify)
 
                     sku_clean = data_shopify['Variant SKU'].astype(str).str.lstrip("'").str.strip()
+                    temp = sku_clean.to_frame(name='SKU_clean').merge(
+                        data_ERP, left_on='SKU_clean', right_on='Codpro', how='left'
+                    )
                     precio_actual = pd.to_numeric(
                         data_shopify['Variant Price']
                         .astype(str)
@@ -1155,26 +1164,40 @@ def pagina_shopify_descuento_precios():
                         errors='coerce'
                     )
 
-                    mask = (
+                    mask_descuento = (
                         marca_normalizada.isin(marcas_objetivo)
                         & (sku_clean.str.len() > 0)
                         & precio_actual.notna()
                     )
+                    mask_erp = (
+                        ~marca_normalizada.isin(marcas_objetivo)
+                        & (sku_clean.str.len() > 0)
+                        & temp['Valuni'].notna()
+                    )
 
-                    precios_descuento = precio_actual[mask].mul(0.90).apply(redondear_centena_mas_cercana)
-                    data_shopify.loc[mask, 'Variant Compare At Price'] = precio_actual[mask].apply(lambda x: f"{x:.2f}")
-                    data_shopify.loc[mask, 'Variant Price'] = precios_descuento.apply(lambda x: f"{x:.2f}")
+                    precios_descuento = precio_actual[mask_descuento].mul(0.90).apply(redondear_centena_mas_cercana)
+                    data_shopify.loc[mask_descuento, 'Variant Compare At Price'] = precio_actual[mask_descuento].apply(lambda x: f"{x:.2f}")
+                    data_shopify.loc[mask_descuento, 'Variant Price'] = precios_descuento.apply(lambda x: f"{x:.2f}")
+                    data_shopify.loc[mask_erp, 'Variant Price'] = temp.loc[mask_erp, 'Valuni'].apply(lambda x: f"{x:.2f}")
 
                     cols_export = ['Handle', 'Title', 'Variant SKU', 'Variant Price', 'Variant Compare At Price']
-                    data_export = data_shopify.loc[mask, cols_export]
+                    data_export = data_shopify[cols_export]
                     output = data_export.to_csv(index=False, encoding='utf-8')
 
-                    st.success(f"✅ Descuento aplicado a {mask.sum()} variante(s) de Shopify.")
-                    if mask.any():
+                    st.success(
+                        f"✅ Shopify con descuento procesado: "
+                        f"{mask_descuento.sum()} variante(s) con descuento y {mask_erp.sum()} variante(s) actualizadas por ERP."
+                    )
+                    sin_cruzar = (sku_clean.str.len() > 0) & (~mask_descuento) & (~mask_erp)
+                    if sin_cruzar.any():
+                        st.warning("⚠️ Estos SKUs no tuvieron descuento ni encontraron precio en el ERP; conservaron su precio original:")
+                        st.dataframe(data_shopify[sin_cruzar][['Handle', 'Variant SKU', 'Variant Price']])
+
+                    if mask_descuento.any():
                         resumen = (
                             pd.DataFrame({
-                                'Marca': marca_producto[mask],
-                                'Precio anterior': precio_actual[mask],
+                                'Marca': marca_producto[mask_descuento],
+                                'Precio anterior': precio_actual[mask_descuento],
                                 'Precio nuevo': precios_descuento,
                             })
                             .groupby('Marca')
@@ -1182,8 +1205,8 @@ def pagina_shopify_descuento_precios():
                             .reset_index()
                         )
                         st.dataframe(resumen)
-                        preview = data_export.copy()
-                        preview['Marca'] = marca_producto[mask].values
+                        preview = data_shopify.loc[mask_descuento, cols_export].copy()
+                        preview['Marca'] = marca_producto[mask_descuento].values
                         st.dataframe(preview[['Handle', 'Title', 'Marca', 'Variant SKU', 'Variant Compare At Price', 'Variant Price']].head(20))
                     else:
                         st.warning("⚠️ No se encontraron variantes con SKU, precio válido y marca objetivo.")
