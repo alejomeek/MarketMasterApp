@@ -1481,16 +1481,19 @@ def main():
     ]
     opcion = st.sidebar.selectbox("Plataforma:", opciones)
 
-    # --- TOGGLE FERIA DEL LIBRO ---
-    st.sidebar.markdown("---")
-    feria_mode = st.sidebar.toggle(
-        "🎪 Modo Feria del Libro",
-        value=False,
-        help="Activa cuando el ERP incluye la columna us05=Feria. El mapa cambia: us05=Feria · us06=Oviedo · us07=Cedi"
-    )
-    if feria_mode:
-        st.sidebar.warning("⚠️ Feria del Libro activa")
-    st.sidebar.markdown("---")
+    # El módulo de costos no depende de bodegas ni del modo Feria.
+    if opcion == "Shopify - Costos":
+        feria_mode = False
+    else:
+        st.sidebar.markdown("---")
+        feria_mode = st.sidebar.toggle(
+            "🎪 Modo Feria del Libro",
+            value=False,
+            help="Activa cuando el ERP incluye la columna us05=Feria. El mapa cambia: us05=Feria · us06=Oviedo · us07=Cedi"
+        )
+        if feria_mode:
+            st.sidebar.warning("⚠️ Feria del Libro activa")
+        st.sidebar.markdown("---")
 
     # Título principal de la aplicación
     st.title("🚀 MarketMaster")
