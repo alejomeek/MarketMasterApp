@@ -951,6 +951,73 @@ def pagina_wix_av19_bulevar_cedi(feria_mode=False):
                 except Exception as e:
                     st.error(f"❌ Error al procesar: {e}")
 
+def preparar_costos_shopify(data_shopify, data_ERP):
+    """Actualiza Cost per item desde ERP.Valuni y devuelve las columnas de Shopify."""
+    required_shopify = ['Handle', 'Title', 'Variant SKU', 'Cost per item']
+    required_erp = ['Codpro', 'Valuni']
+    missing_shopify = [col for col in required_shopify if col not in data_shopify.columns]
+    missing_erp = [col for col in required_erp if col not in data_ERP.columns]
+    if missing_shopify or missing_erp:
+        missing = missing_shopify + missing_erp
+        raise ValueError(f"Faltan columnas requeridas: {', '.join(missing)}")
+
+    output = data_shopify.copy()
+    erp = data_ERP[required_erp].copy()
+    erp['Codpro'] = erp['Codpro'].astype(str).str.strip()
+    erp['Valuni'] = pd.to_numeric(erp['Valuni'], errors='coerce')
+
+    sku_clean = output['Variant SKU'].astype(str).str.lstrip("'").str.strip()
+    temp = sku_clean.to_frame(name='SKU_clean').merge(
+        erp, left_on='SKU_clean', right_on='Codpro', how='left'
+    )
+    mask = temp['Valuni'].notna()
+    output.loc[mask, 'Cost per item'] = temp.loc[mask, 'Valuni'].map(lambda value: f"{value:.2f}")
+
+    sin_cruzar = (sku_clean.str.len() > 0) & (~mask)
+    cols_export = ['Handle', 'Title', 'Variant SKU', 'Cost per item']
+    return output[cols_export], int(mask.sum()), int(sin_cruzar.sum())
+
+
+def pagina_shopify_costos():
+    st.markdown("### 🛍️ Shopify - Costos")
+    st.info("Actualiza únicamente `Cost per item` usando `Valuni` del ERP. No modifica precios ni inventario.")
+    uploaded_products_shopify = st.file_uploader(
+        "📤 Cargar archivo(s) CSV de Shopify (Products Export)",
+        type=['csv'], key="shopify_cost_csv", accept_multiple_files=True
+    )
+    uploaded_products_erp = st.file_uploader(
+        "🧾 Cargar archivo CSV de ERP", type=['csv'], key="shopify_cost_erp"
+    )
+
+    if uploaded_products_shopify and uploaded_products_erp:
+        if st.button('🔄 Procesar Costos Shopify', key="shopify_cost_process"):
+            with st.spinner('Procesando archivos...'):
+                try:
+                    data_shopify = pd.concat(
+                        [pd.read_csv(file, dtype=str, keep_default_na=False) for file in uploaded_products_shopify],
+                        ignore_index=True
+                    )
+                    data_ERP = pd.read_csv(
+                        uploaded_products_erp, delimiter=';', encoding='latin1', low_memory=False
+                    )
+                    data_ERP = data_ERP[
+                        data_ERP['Codpro'].notna()
+                        & ~(data_ERP['Codpro'].isin(['', ' ']) | data_ERP['Codpro'].str.contains('\x1a', na=False))
+                    ]
+                    data_export, actualizados, sin_cruzar = preparar_costos_shopify(data_shopify, data_ERP)
+                    output = data_export.to_csv(index=False, encoding='utf-8')
+
+                    st.success(f"✅ ¡Archivo de costos Shopify procesado! — {actualizados} costos actualizados.")
+                    if sin_cruzar:
+                        st.warning("⚠️ Los SKUs sin coincidencia en el ERP conservaron su costo original.")
+                    st.dataframe(data_export[data_export['Variant SKU'].astype(str).str.len() > 0].head(10))
+                    st.download_button(
+                        label="⬇️ Descargar Shopify Costos modificado",
+                        data=output, file_name="Shopify_Costos_ACTUALIZADO.csv", mime="text/csv"
+                    )
+                except Exception as e:
+                    st.error(f"❌ Error al procesar costos: {e}")
+
 # --- LÓGICA PARA SHOPIFY ---
 def pagina_shopify(feria_mode=False, descuento_mode=False):
     st.markdown("### 🛍️ Shopify - Inventario")
@@ -1409,6 +1476,7 @@ def main():
         "Rappi - Medellín",
         "Shopify",
         "Shopify con descuento",
+        "Shopify - Costos",
         "Addi"
     ]
     opcion = st.sidebar.selectbox("Plataforma:", opciones)
@@ -1479,6 +1547,8 @@ def main():
         pagina_shopify(feria_mode)
     elif opcion == "Shopify con descuento":
         pagina_shopify_descuento(feria_mode)
+    elif opcion == "Shopify - Costos":
+        pagina_shopify_costos()
     elif opcion == "Addi":
         pagina_addi(feria_mode)
 
