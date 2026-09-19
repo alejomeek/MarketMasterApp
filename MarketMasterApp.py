@@ -39,7 +39,10 @@ def banner_feria():
 
 # --- LÓGICA PARA MERCADO LIBRE (VERSIÓN ACTUALIZADA CON NUEVAS COLUMNAS) ---
 def pagina_meli_cedi_oviedo(feria_mode=False, calle74=False):
-    st.markdown("### 🛒 Mercado Libre - Cedi + Oviedo")
+    titulo = "Mercado Libre - Cedi + Oviedo"
+    if calle74:
+        titulo += " + Calle 74"
+    st.markdown(f"### 🛒 {titulo}")
     if feria_mode:
         banner_feria()
 
@@ -233,7 +236,10 @@ def pagina_meli_cedi_oviedo(feria_mode=False, calle74=False):
                     st.error(f"❌ Error al procesar: {e}")
 
 def pagina_meli_av19_bulevar_oviedo(feria_mode=False, calle74=False):
-    st.markdown("### 🛒 Mercado Libre - Av. 19 + Bulevar + Oviedo")
+    titulo = "Mercado Libre - Av. 19 + Bulevar + Oviedo"
+    if calle74:
+        titulo += " + Calle 74"
+    st.markdown(f"### 🛒 {titulo}")
     if feria_mode:
         banner_feria()
 
@@ -434,7 +440,10 @@ def pagina_meli_av19_bulevar_oviedo(feria_mode=False, calle74=False):
                     st.error(f"❌ Error al procesar: {e}")
 
 def pagina_meli_av19_bulevar_cedi_oviedo(feria_mode=False, calle74=False):
-    st.markdown("### 🛒 Mercado Libre - Av. 19 + Bulevar + Cedi + Oviedo")
+    titulo = "Mercado Libre - Av. 19 + Bulevar + Cedi + Oviedo"
+    if calle74:
+        titulo += " + Calle 74"
+    st.markdown(f"### 🛒 {titulo}")
     if feria_mode:
         banner_feria()
 
@@ -1020,7 +1029,8 @@ def pagina_shopify_costos():
 
 # --- LÓGICA PARA SHOPIFY ---
 def pagina_shopify(feria_mode=False, descuento_mode=False):
-    st.markdown("### 🛍️ Shopify - Inventario")
+    titulo = "Shopify con descuento" if descuento_mode else "Shopify"
+    st.markdown(f"### 🛍️ {titulo}")
     if feria_mode:
         banner_feria()
 
